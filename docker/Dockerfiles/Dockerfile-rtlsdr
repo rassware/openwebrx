@@ -3,12 +3,12 @@ ARG PROJECT
 FROM ${PROJECT}-base:$ARCHTAG
 ARG MAKEFLAGS
 
-COPY docker/scripts/install-dependencies-rtlsdr.sh \
-     docker/scripts/install-connectors.sh /
+COPY docker/scripts/install-010-dependencies-rtlsdr.sh \
+     docker/scripts/install-500-connectors.sh /
 
-RUN /install-dependencies-rtlsdr.sh &&\
-    rm /install-dependencies-rtlsdr.sh &&\
-    /install-connectors.sh &&\
-    rm /install-connectors.sh
+RUN /install-010-dependencies-rtlsdr.sh &&\
+    rm /install-010-dependencies-rtlsdr.sh &&\
+    /install-500-connectors.sh &&\
+    rm /install-500-connectors.sh
 
 COPY . /opt/openwebrx

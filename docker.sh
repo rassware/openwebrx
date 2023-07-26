@@ -5,7 +5,7 @@ export DH_PROJECT="openwebrxplus"
 export DH_USERNAME="slechev"
 
 #IMAGES="${DH_PROJECT}-rtlsdr ${DH_PROJECT}-sdrplay ${DH_PROJECT}-hackrf ${DH_PROJECT}-airspy ${DH_PROJECT}-rtlsdr-soapy ${DH_PROJECT}-plutosdr ${DH_PROJECT}-limesdr ${DH_PROJECT}-soapyremote ${DH_PROJECT}-perseus ${DH_PROJECT}-fcdpp ${DH_PROJECT}-radioberry ${DH_PROJECT}-uhd ${DH_PROJECT}-rtltcp ${DH_PROJECT}-runds ${DH_PROJECT}-hpsdr ${DH_PROJECT}-bladerf ${DH_PROJECT}-full ${DH_PROJECT}"
-IMAGES="${DH_PROJECT}-full"
+IMAGES="${DH_PROJECT}-rtlsdr ${DH_PROJECT}"
 
 ARCH=${ARCH:-$(uname -m)}
 TAG=${TAG:-"latest"}
@@ -150,8 +150,8 @@ buildn () {
   done
 
   # tag full image alias image
-  docker tag ${DH_USERNAME}/${DH_PROJECT}-full:${ARCHTAG} ${DH_USERNAME}/${DH_PROJECT}-nightly:${NIGHTLY_BUILD}
-  docker tag ${DH_USERNAME}/${DH_PROJECT}-full:${ARCHTAG} ${DH_USERNAME}/${DH_PROJECT}-nightly
+  #docker tag ${DH_USERNAME}/${DH_PROJECT}-full:${ARCHTAG} ${DH_USERNAME}/${DH_PROJECT}-nightly:${NIGHTLY_BUILD}
+  #docker tag ${DH_USERNAME}/${DH_PROJECT}-full:${ARCHTAG} ${DH_USERNAME}/${DH_PROJECT}-nightly
 }
 
 buildr () {
