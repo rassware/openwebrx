@@ -1,10 +1,14 @@
 from csdr.chain.demodulator import BaseDemodulatorChain, FixedAudioRateChain, FixedIfSampleRateChain, DialFrequencyReceiver, MetaProvider, SlotFilterChain, DemodulatorError, ServiceDemodulator
-from pycsdr.modules import FmDemod, Agc, Writer, Buffer
+from pycsdr.modules import FmDemod, Agc, Writer, Buffer, DcBlock, Lowpass
 from pycsdr.types import Format
-from digiham.modules import DstarDecoder, DcBlock, FskDemodulator, GfskDemodulator, DigitalVoiceFilter, MbeSynthesizer, NarrowRrcFilter, NxdnDecoder, DmrDecoder, WideRrcFilter, YsfDecoder, PocsagDecoder
+from digiham.modules import DstarDecoder, FskDemodulator, GfskDemodulator, DigitalVoiceFilter, MbeSynthesizer, NarrowRrcFilter, NxdnDecoder, DmrDecoder, WideRrcFilter, YsfDecoder, PocsagDecoder
 from digiham.ambe import Modes, ServerError
 from owrx.meta import MetaParser
 from owrx.pocsag import PocsagParser
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class DigihamChain(BaseDemodulatorChain, FixedIfSampleRateChain, FixedAudioRateChain, DialFrequencyReceiver, MetaProvider):
@@ -24,6 +28,9 @@ class DigihamChain(BaseDemodulatorChain, FixedIfSampleRateChain, FixedAudioRateC
             raise DemodulatorError("Connection to codecserver failed: {}".format(ce))
         except ServerError as se:
             raise DemodulatorError("Codecserver error: {}".format(se))
+        except RuntimeError as re:
+            logger.exception("Codecserver error while instantiating MbeSynthesizer:")
+            raise DemodulatorError("Fatal codecserver error. Please check receiver logs.")
         workers += [
             fskDemodulator,
             decoder,
@@ -72,6 +79,7 @@ class Dstar(DigihamChain):
             fskDemodulator=FskDemodulator(samplesPerSymbol=10),
             decoder=DstarDecoder(),
             mbeMode=Modes.DStarMode,
+            filter=WideRrcFilter(),
             codecserver=codecserver
         )
 
@@ -117,6 +125,8 @@ class PocsagDemodulator(ServiceDemodulator, DialFrequencyReceiver):
         self.parser = PocsagParser()
         workers = [
             FmDemod(),
+            DcBlock(),
+            Lowpass(Format.FLOAT, 1200 / self.getFixedAudioRate()),
             FskDemodulator(samplesPerSymbol=40, invert=True),
             PocsagDecoder(),
             self.parser,

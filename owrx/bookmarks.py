@@ -36,7 +36,7 @@ class Bookmark(object):
         }
 
 
-class BookmakrSubscription(object):
+class BookmarkSubscription(object):
     def __init__(self, subscriptee, range, subscriber: callable):
         self.subscriptee = subscriptee
         self.range = range
@@ -67,11 +67,7 @@ class Bookmarks(object):
         self.bookmarks = []
         self.subscriptions = []
         # Known bookmark files, starting with the main file
-        self.fileList = [
-            Bookmarks._getBookmarksFile(),
-            "bookmarks.json",
-            "/etc/openwebrx/bookmarks.json",
-        ]
+        self.fileList = [Bookmarks._getBookmarksFile(), "/etc/openwebrx/bookmarks.json", "bookmarks.json"]
         # Find additional bookmark files in the bookmarks.d folder
         try:
             bookmarksDir = "/etc/openwebrx/bookmarks.d"
@@ -166,9 +162,11 @@ class Bookmarks(object):
                     logger.exception("Error while calling bookmark subscriptions")
 
     def subscribe(self, range, callback):
-        self.subscriptions.append(BookmakrSubscription(self, range, callback))
+        sub = BookmarkSubscription(self, range, callback)
+        self.subscriptions.append(BookmarkSubscription(self, range, callback))
+        return sub
 
-    def unsubscribe(self, subscriptions: BookmakrSubscription):
-        if subscriptions not in self.subscriptions:
+    def unsubscribe(self, subscription: BookmarkSubscription):
+        if subscription not in self.subscriptions:
             return
-        self.subscriptions.remove(subscriptions)
+        self.subscriptions.remove(subscription)

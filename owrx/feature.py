@@ -13,7 +13,6 @@ from datetime import datetime, timedelta
 import logging
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 
 class UnknownFeatureException(Exception):
@@ -76,19 +75,23 @@ class FeatureDetector(object):
         # optional features and their requirements
         "digital_voice_digiham": ["digiham", "codecserver_ambe"],
         "digital_voice_freedv": ["freedv_rx"],
-        "digital_voice_m17": ["m17_demod", "digiham"],
+        "digital_voice_m17": ["m17_demod"],
         "wsjt-x": ["wsjtx"],
         "wsjt-x-2-3": ["wsjtx_2_3"],
         "wsjt-x-2-4": ["wsjtx_2_4"],
         "msk144": ["msk144decoder"],
         "packet": ["direwolf"],
         "pocsag": ["digiham"],
-        "page": ["multimon"],
-        "selcall": ["multimon"],
-        "ism": ["rtl433"],
-        "hfdl": ["dumphfdl"],
         "js8call": ["js8", "js8py"],
         "drm": ["dream"],
+        "adsb": ["dump1090"],
+        "ism": ["rtl_433"],
+        "hfdl": ["dumphfdl"],
+        "vdl2": ["dumpvdl2"],
+        "acars": ["acarsdec"],
+        "page": ["multimon"],
+        "selcall": ["multimon"],
+        "rds": ["redsea"],
         "png": ["imagemagick"],
     }
 
@@ -142,14 +145,12 @@ class FeatureDetector(object):
         if cache.has(requirement):
             return cache.get(requirement)
 
-        logger.debug("performing feature check for %s", requirement)
         method = self._get_requirement_method(requirement)
         result = False
         if method is not None:
             result = method()
         else:
             logger.error("detection of requirement {0} not implement. please fix in code!".format(requirement))
-        logger.debug("feature check for %s complete. result: %s", requirement, result)
 
         cache.set(requirement, result)
         return result
@@ -172,7 +173,14 @@ class FeatureDetector(object):
                 cwd=tmp_dir,
                 env=env,
             )
-            rc = process.wait()
+            while True:
+                try:
+                    rc = process.wait(10)
+                    break
+                except subprocess.TimeoutExpired:
+                    logger.warning("feature check command \"%s\" did not return after 10 seconds!", command)
+                    process.kill()
+
             if expected_result is None:
                 return rc != 32512
             else:
@@ -415,7 +423,7 @@ class FeatureDetector(object):
 
         You can find more information [here](https://github.com/mobilinkd/m17-cxx-demod)
         """
-        return self.command_is_runnable("m17-demod")
+        return self.command_is_runnable("m17-demod", 0)
 
     def has_direwolf(self):
         """
@@ -434,7 +442,7 @@ class FeatureDetector(object):
     def has_wsjtx(self):
         """
         To decode FT8 and other digimodes, you need to install the WSJT-X software suite. Please check the
-        [WSJT-X homepage](https://physics.princeton.edu/pulsar/k1jt/wsjtx.html) for ready-made packages or instructions
+        [WSJT-X homepage](https://wsjt.sourceforge.io/) for ready-made packages or instructions
         on how to build from source.
         """
         return reduce(and_, map(self.command_is_runnable, ["jt9", "wsprd"]), True)
@@ -559,6 +567,9 @@ class FeatureDetector(object):
         Codecserver is used to decode audio data from digital voice modes using the AMBE codec.
 
         You can find more information [here](https://github.com/jketterl/codecserver).
+
+        NOTE: this feature flag checks both the availability of codecserver as well as the availability of the AMBE
+        codec in the configured codecserver instance.
         """
 
         config = Config.get()
@@ -573,6 +584,65 @@ class FeatureDetector(object):
             return False
         except ConnectionError:
             return False
+        except RuntimeError as e:
+            logger.exception("Codecserver error while checking for AMBE support:")
+            return False
+
+    def has_dump1090(self):
+        """
+        To be able to decode Mode-S and ADS-B traffic originating from airplanes, you need to install the dump1090
+        decoder. There is a number of forks available, any version that supports the `--ifile` and `--iformat` arguments
+        should work.
+
+        Recommended fork: [dump1090 by Flightaware](https://github.com/flightaware/dump1090)
+
+        If you are using the OpenWebRX Debian or Ubuntu repository, you should be able to install the package
+        `dump1090-fa-minimal`.
+
+        If you are running a different fork, please make sure that the command `dump1090` (without suffixes) runs the
+        version you would like to use. You can use symbolic links or the
+        [Debian alternatives system](https://wiki.debian.org/DebianAlternatives) to achieve this.
+        """
+        return self.command_is_runnable("dump1090 --version")
+
+    def has_rtl_433(self):
+        """
+        OpenWebRX can make use of the `rtl_433` software to decode various signals in the ISM bands.
+
+        You can find more information [here](https://github.com/merbanan/rtl_433).
+
+        Debian and Ubuntu based systems should be able to install the package `rtl-433` from the package manager.
+        """
+        return self.command_is_runnable("rtl_433 -h")
+
+    def has_dumphfdl(self):
+        """
+        OpenWebRX supports decoding HFDL airplane communications using the `dumphfdl` decoder.
+
+        You can find more information [here](https://github.com/szpajder/dumphfdl)
+
+        If you are using the OpenWebRX Debian or Ubuntu repository, you should be able to install the package
+        `dumphfdl`.
+        """
+        return self.command_is_runnable("dumphfdl --version")
+
+    def has_dumpvdl2(self):
+        """
+        OpenWebRX supports decoding VDL Mode 2 airplane communications using the `dumpvdl2` decoder.
+
+        You can find more information [here](https://github.com/szpajder/dumpvdl2)
+
+        If you are using the OpenWebRX Debian or Ubuntu repository, you should be able to install the package
+        `dumpvdl2`.
+        """
+        return self.command_is_runnable("dumpvdl2 --version")
+
+    def has_acarsdec(self):
+        """
+        OpenWebRX uses the [acarsdec](https://github.com/TLeconte/acarsdec) tool to decode ACARS
+        traffic. You will have to compile it from source.
+        """
+        return self.command_is_runnable("acarsdec --help")
 
     def has_imagemagick(self):
         """
@@ -589,19 +659,9 @@ class FeatureDetector(object):
         """
         return self.command_is_runnable("multimon-ng --help")
 
-    def has_rtl433(self):
+    def has_redsea(self):
         """
-        OpenWebRX uses the [rtl-433](https://github.com/merbanan/rtl_433) decoder suite to decode various
-        instrumentation signals. Rtl_433 is available from the package manager on many
-        distributions, or you can compile it from source.
+        OpenWebRX uses the [redsea](https://github.com/windytan/redsea) tool to decode RDS
+        information from FM broadcasts. You will have to compile it from source.
         """
-        return self.command_is_runnable("rtl_433 --help")
-
-    def has_dumphfdl(self):
-        """
-        OpenWebRX uses the [dumphfdl](https://github.com/szpajder/dumphfdl) tool to decode HFDL
-        aircraft communications. Dumphfdl is not yet available as a package and thus you will have
-        to compile it from source.
-        """
-        return self.command_is_runnable("dumphfdl --help")
-
+        return self.command_is_runnable("redsea --version")

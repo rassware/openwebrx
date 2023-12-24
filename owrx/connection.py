@@ -3,11 +3,13 @@ from owrx.dsp import DspManager
 from owrx.cpu import CpuUsageThread
 from owrx.sdr import SdrService
 from owrx.source import SdrSourceState, SdrClientClass, SdrSourceEventClient
-from owrx.client import ClientRegistry, TooManyClientsException
+from owrx.client import ClientRegistry, TooManyClientsException, BannedClientException
 from owrx.feature import FeatureDetector
 from owrx.version import openwebrx_version
 from owrx.bands import Bandplan
 from owrx.bookmarks import Bookmarks
+from owrx.repeaters import Repeaters
+from owrx.eibi import EIBI
 from owrx.map import Map
 from owrx.property import PropertyStack, PropertyDeleted
 from owrx.modes import Modes, DigitalMode
@@ -116,6 +118,7 @@ class OpenWebRxClient(Client, metaclass=ABCMeta):
 class OpenWebRxReceiverClient(OpenWebRxClient, SdrSourceEventClient):
     sdr_config_keys = [
         "waterfall_levels",
+        "waterfall_auto_level_default_mode",
         "samp_rate",
         "start_mod",
         "start_freq",
@@ -137,13 +140,14 @@ class OpenWebRxReceiverClient(OpenWebRxClient, SdrSourceEventClient):
         "fft_compression",
         "max_clients",
         "tuning_precision",
-        "ui_opacity",
-        "ui_frame",
-        "ui_swap_wheel",
         "allow_center_freq_changes",
         "allow_audio_recording",
-        "magic_key",
+        "allow_chat",
+        "callsign_url",
+        "vessel_url",
         "flight_url",
+        "modes_url",
+        "receiver_gps",
     ]
 
     def __init__(self, conn):
@@ -160,6 +164,10 @@ class OpenWebRxReceiverClient(OpenWebRxClient, SdrSourceEventClient):
             ClientRegistry.getSharedInstance().addClient(self)
         except TooManyClientsException:
             self.write_backoff_message("Too many clients")
+            self.close()
+            raise
+        except BannedClientException:
+            self.write_backoff_message("Client address banned")
             self.close()
             raise
 
@@ -212,12 +220,21 @@ class OpenWebRxReceiverClient(OpenWebRxClient, SdrSourceEventClient):
                 frequencyRange = (cf - srh, cf + srh)
                 dial_frequencies = Bandplan.getSharedInstance().collectDialFrequencies(frequencyRange)
                 bookmarks = [b.__dict__() for b in Bookmarks.getSharedInstance().getBookmarks(frequencyRange)]
+                # Search EIBI schedule for bookmarks, if enabled
+                range = self.stack["eibi_bookmarks_range"]
+                if range > 0:
+                    bookmarks += [b.__dict__() for b in EIBI.getSharedInstance().currentBookmarks(frequencyRange, rangeKm=range)]
+                # Search RepeaterBook for bookmarks, if enabled
+                range = self.stack["repeater_range"]
+                if range > 0:
+                    bookmarks += [b.__dict__() for b in Repeaters.getSharedInstance().getBookmarks(frequencyRange, rangeKm=range)]
             self.write_dial_frequencies(dial_frequencies)
             self.write_bookmarks(bookmarks)
 
         def updateBookmarkSubscription(*args):
             if self.bookmarkSub is not None:
                 self.bookmarkSub.cancel()
+                self.bookmarkSub = None
             if "center_freq" in configProps and "samp_rate" in configProps:
                 cf = configProps["center_freq"]
                 srh = configProps["samp_rate"] / 2
@@ -309,7 +326,7 @@ class OpenWebRxReceiverClient(OpenWebRxClient, SdrSourceEventClient):
                             self.sdr.activateProfile(profile[1])
                         else:
                             # Force update back to the current profile
-                            self.sdr.activateProfile(self.sdr.getProfileId(), force=True)
+                            self.resetSdr()
                 elif message["type"] == "setfrequency":
                     # If the magic key is set in the settings, only allow
                     # changes if it matches the received key
@@ -325,6 +342,13 @@ class OpenWebRxReceiverClient(OpenWebRxClient, SdrSourceEventClient):
                         self.connectionProperties = message["params"]
                         if self.dsp:
                             self.getDsp().setProperties(self.connectionProperties)
+                elif message["type"] == "sendmessage":
+                    if "text" in message:
+                        ClientRegistry.getSharedInstance().broadcastChatMessage(
+                            self,
+                            message["text"],
+                            message["name"] if "name" in message else None
+                        )
 
             else:
                 logger.warning("received message without type: {0}".format(message))
@@ -358,6 +382,13 @@ class OpenWebRxReceiverClient(OpenWebRxClient, SdrSourceEventClient):
             return
 
         self.sdr.addClient(self)
+
+    def resetSdr(self):
+        if self.sdr is not None:
+            self.stopDsp()
+            self.stack.removeLayerByPriority(0)
+            self.sdr.removeClient(self)
+            self.sdr.addClient(self)
 
     def handleSdrAvailable(self):
         self.getDsp().setProperties(self.connectionProperties)
@@ -460,6 +491,14 @@ class OpenWebRxReceiverClient(OpenWebRxClient, SdrSourceEventClient):
     def write_backoff_message(self, reason):
         self.send({"type": "backoff", "reason": reason})
 
+    def write_chat_message(self, name, text, color = "white"):
+        self.send({
+            "type": "chat_message",
+            "name": name,
+            "text": text,
+            "color": color
+        })
+
     def write_modes(self, modes):
         def to_json(m):
             res = {
@@ -473,6 +512,7 @@ class OpenWebRxReceiverClient(OpenWebRxClient, SdrSourceEventClient):
                 res["bandpass"] = {"low_cut": m.bandpass.low_cut, "high_cut": m.bandpass.high_cut}
             if isinstance(m, DigitalMode):
                 res["underlying"] = m.underlying
+                res["secondaryFft"] = m.secondaryFft
             return res
 
         self.send({"type": "modes", "value": [to_json(m) for m in modes]})
@@ -485,16 +525,19 @@ class MapConnection(OpenWebRxClient):
         pm = Config.get()
         filtered_config = pm.filter(
             "google_maps_api_key",
+            "openweathermap_api_key",
             "receiver_gps",
+            "map_type",
             "map_position_retention_time",
             "map_ignore_indirect_reports",
             "map_prefer_recent_reports",
             "callsign_url",
             "vessel_url",
             "flight_url",
+            "modes_url",
             "receiver_name",
         )
-        filtered_config.wire(self.write_config)
+        self.configSub = filtered_config.wire(self.write_config)
 
         self.write_config(filtered_config.__dict__())
 
@@ -505,6 +548,7 @@ class MapConnection(OpenWebRxClient):
 
     def close(self, error: bool = False):
         Map.getSharedInstance().removeClient(self)
+        self.configSub.cancel()
         super().close(error)
 
     def write_config(self, cfg):

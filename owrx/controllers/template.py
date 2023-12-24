@@ -1,5 +1,6 @@
 from owrx.controllers import Controller
 from owrx.details import ReceiverDetails
+from owrx.config import Config
 from string import Template
 import pkg_resources
 
@@ -25,7 +26,7 @@ class WebpageController(TemplateController):
         return "../" * levels
 
     def header_variables(self):
-        variables = {"document_root": self.get_document_root()}
+        variables = { "document_root": self.get_document_root(), "map_type": "" }
         variables.update(ReceiverDetails().__dict__())
         return variables
 
@@ -42,7 +43,27 @@ class IndexController(WebpageController):
 class MapController(WebpageController):
     def indexAction(self):
         # TODO check if we have a google maps api key first?
-        self.serve_template("map.html", **self.template_variables())
+        self.serve_template("map-{}.html".format(self.map_type()), **self.template_variables())
+
+    def header_variables(self):
+        # Invert map type for the "map" toolbar icon
+        variables = super().header_variables();
+        type = self.map_type()
+        if type == "google":
+            variables.update({ "map_type" : "?type=leaflet" })
+        elif type == "leaflet":
+            variables.update({ "map_type" : "?type=google" })
+        return variables
+
+    def map_type(self):
+        pm = Config.get()
+        if "type" not in self.request.query:
+            type = pm["map_type"]
+        else:
+            type = self.request.query["type"][0]
+            if type not in ["google", "leaflet"]:
+                type = pm["map_type"]
+        return type
 
 
 class PolicyController(WebpageController):

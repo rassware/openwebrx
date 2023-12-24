@@ -37,5 +37,17 @@ ${header}
             <a class="btn btn-secondary" href="features">Feature report</a>
         </div>
     </div>
+    <div class="row">
+        <h1 class="col-12">Clients</h1>
+    </div>
+    <div class="row">
+        <input class="form-control form-control-sm" id="broadcast-text" placeholder="Message to broadcast to all clients" type="text" />
+    </div>
+    <div style="text-align:right;margin:10px 0 30px 0;">
+        <button type="button" class="btn btn-sm btn-danger" id="broadcast-send">send</button>
+    </div>
+    <div class="row client-list">
+        ${clients}
+    </div>
 </div>
 </body>

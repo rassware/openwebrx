@@ -181,9 +181,9 @@ class FaxParser(ThreadModule):
                         }
 
             #
-            # If BMP header ('BM ... <40> ...') found...
+            # If BMP header ('BM ... <IOC> <LPM> ... <40> ...') found...
             #
-            elif ph>=0 and ph+14<ll and self.data[ph+14]==40:
+            elif ph>=0 and ph+14<ll and self.data[ph+14]==40 and (self.data[ph+6]==144 or self.data[ph+6]==72) and (self.data[ph+7]==120 or self.data[ph+7]==60):
                 # Skip everything until 'BM'
                 del self.data[0:ph]
                 # If got the entire header...

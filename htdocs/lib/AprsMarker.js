@@ -2,6 +2,18 @@ function AprsMarker() {}
 
 AprsMarker.prototype = new google.maps.OverlayView();
 
+AprsMarker.prototype.isFacingEast = function(symbol) {
+    var candidates = ''
+    if (symbol.table === '/') {
+        // primary table
+        candidates = '(*<=>CFPUXYabefghjkpsuv[';
+    } else {
+        // alternate table
+        candidates = 'hkluv';
+    }
+    return candidates.includes(symbol.symbol);
+};
+
 AprsMarker.prototype.draw = function() {
 	var div = this.div;
 	var overlay = this.overlay;
@@ -16,9 +28,15 @@ AprsMarker.prototype.draw = function() {
     }
 
     if (this.course) {
-        if (this.course > 180) {
+        if (this.symbol && !this.isFacingEast(this.symbol)) {
+            // assume symbol points to the north
+            div.style.transform = 'rotate(' + this.course + ' deg)';
+        } else if (this.course > 180) {
+            // symbol is pointing east
+            // don't rotate more than 180 degrees, rather mirror
             div.style.transform = 'scalex(-1) rotate(' + (270 - this.course) + 'deg)'
         } else {
+            // symbol is pointing east
             div.style.transform = 'rotate(' + (this.course - 90) + 'deg)';
         }
     } else {
@@ -70,7 +88,7 @@ AprsMarker.prototype.onAdd = function() {
     div.appendChild(overlay);
 
 	var self = this;
-    google.maps.event.addDomListener(div, "click", function(event) {
+    div.addEventListener("click", function(event) {
         event.stopPropagation();
         google.maps.event.trigger(self, "click", event);
     });
@@ -79,7 +97,7 @@ AprsMarker.prototype.onAdd = function() {
     panes.overlayImage.appendChild(div);
 };
 
-AprsMarker.prototype.remove = function() {
+AprsMarker.prototype.onRemove = function() {
 	if (this.div) {
 		this.div.parentNode.removeChild(this.div);
 		this.div = null;

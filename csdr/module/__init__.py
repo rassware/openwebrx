@@ -1,5 +1,5 @@
 from pycsdr.modules import Module as BaseModule
-from pycsdr.modules import Reader, Writer
+from pycsdr.modules import Reader, Writer, Buffer
 from pycsdr.types import Format
 from abc import ABCMeta, abstractmethod
 from threading import Thread
@@ -7,6 +7,10 @@ from io import BytesIO
 from subprocess import Popen, PIPE, TimeoutExpired
 from functools import partial
 import pickle
+import logging
+import json
+
+logger = logging.getLogger(__name__)
 
 
 class Module(BaseModule, metaclass=ABCMeta):
@@ -41,7 +45,10 @@ class Module(BaseModule, metaclass=ABCMeta):
                     break
                 if data is None or isinstance(data, bytes) and len(data) == 0:
                     break
-                write(data)
+                try:
+                    write(data)
+                except BrokenPipeError:
+                    break
 
         return copy
 
@@ -109,6 +116,57 @@ class PickleModule(ThreadModule):
         pass
 
 
+class LineBasedModule(ThreadModule, metaclass=ABCMeta):
+    def __init__(self):
+        self.retained = bytes()
+        super().__init__()
+
+    def getInputFormat(self) -> Format:
+        return Format.CHAR
+
+    def getOutputFormat(self) -> Format:
+        return Format.CHAR
+
+    def run(self):
+        while self.doRun:
+            data = self.reader.read()
+            if data is None:
+                self.doRun = False
+            else:
+                self.retained += data
+                lines = self.retained.split(b"\n")
+
+                # keep the last line
+                # this should either be empty if the last char was \n
+                # or an incomplete line if the read returned early
+                self.retained = lines[-1]
+
+                # log all completed lines
+                for line in lines[0:-1]:
+                    parsed = self.process(line)
+                    if parsed is not None:
+                        self.writer.write(pickle.dumps(parsed))
+
+    @abstractmethod
+    def process(self, line: bytes) -> any:
+        pass
+
+
+class JsonParser(LineBasedModule):
+    def __init__(self, mode: str):
+        self.mode = mode
+        super().__init__()
+
+    def process(self, line):
+        try:
+            msg = json.loads(line)
+            msg["mode"] = self.mode
+            logger.debug(msg)
+            return msg
+        except json.JSONDecodeError:
+            logger.exception("error parsing rtl433 json")
+
+
 class PopenModule(AutoStartModule, metaclass=ABCMeta):
     def __init__(self):
         self.process = None
@@ -137,4 +195,34 @@ class PopenModule(AutoStartModule, metaclass=ABCMeta):
             except TimeoutExpired:
                 self.process.kill()
             self.process = None
+        self.reader.stop()
+
+
+class LogReader(Thread):
+    def __init__(self, prefix: str, buffer: Buffer):
+        self.reader = buffer.getReader()
+        self.logger = logging.getLogger(prefix)
+        self.retained = bytes()
+        super().__init__()
+        self.start()
+
+    def run(self) -> None:
+        while True:
+            data = self.reader.read()
+            if data is None:
+                return
+
+            self.retained += data
+            lines = self.retained.split(b"\n")
+
+            # keep the last line
+            # this should either be empty if the last char was \n
+            # or an incomplete line if the read returned early
+            self.retained = lines[-1]
+
+            # log all completed lines
+            for line in lines[0:-1]:
+                self.logger.info("{}: {}".format("STDOUT", line.strip(b'\n').decode()))
+
+    def stop(self):
         self.reader.stop()

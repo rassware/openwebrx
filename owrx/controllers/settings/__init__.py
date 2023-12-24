@@ -1,7 +1,9 @@
 from owrx.config import Config
 from owrx.controllers.admin import AuthorizationMixin
 from owrx.controllers.template import WebpageController
+from owrx.controllers.clients import ClientController
 from owrx.breadcrumb import Breadcrumb, BreadcrumbItem, BreadcrumbMixin
+from owrx.websocket import WebSocketConnection
 from abc import ABCMeta, abstractmethod
 from urllib.parse import parse_qs
 
@@ -13,6 +15,11 @@ logger = logging.getLogger(__name__)
 class SettingsController(AuthorizationMixin, WebpageController):
     def indexAction(self):
         self.serve_template("settings.html", **self.template_variables())
+
+    def template_variables(self):
+        variables = super().template_variables()
+        variables["clients"] = ClientController.renderClients()
+        return variables
 
 
 class SettingsFormController(AuthorizationMixin, BreadcrumbMixin, WebpageController, metaclass=ABCMeta):

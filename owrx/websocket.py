@@ -6,6 +6,7 @@ from multiprocessing import Pipe
 import select
 import threading
 from abc import ABC, abstractmethod
+from datetime import datetime
 
 import logging
 
@@ -56,6 +57,7 @@ class WebSocketConnection(object):
                 logger.exception("exception while shutting down websocket connections")
 
     def __init__(self, handler, messageHandler: Handler):
+        self.startTime = datetime.now()
         self.handler = handler
         self.handler.connection.setblocking(0)
         self.messageHandler = None

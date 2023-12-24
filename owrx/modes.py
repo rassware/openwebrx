@@ -33,19 +33,34 @@ class Mode:
         return self.modulation
 
 
+EmptyMode = Mode("empty", "Empty")
+
+
 class AnalogMode(Mode):
     pass
 
 
 class DigitalMode(Mode):
     def __init__(
-        self, modulation, name, underlying, bandpass: Bandpass = None, requirements=None, service=False, squelch=True
+        self,
+        modulation,
+        name,
+        underlying,
+        bandpass: Bandpass = None,
+        requirements=None,
+        service=False,
+        squelch=True,
+        secondaryFft=True
     ):
         super().__init__(modulation, name, bandpass, requirements, service, squelch)
         self.underlying = underlying
+        self.secondaryFft = secondaryFft
 
     def get_underlying_mode(self):
-        return Modes.findByModulation(self.underlying[0])
+        mode = Modes.findByModulation(self.underlying[0])
+        if mode is None:
+            mode = EmptyMode
+        return mode
 
     def get_bandpass(self):
         if self.bandpass is not None:
@@ -107,15 +122,25 @@ class Modes(object):
         AnalogMode("usb", "USB", bandpass=Bandpass(300, 3000)),
         AnalogMode("cw", "CW", bandpass=Bandpass(700, 900)),
         AnalogMode("sam", "SAM", bandpass=Bandpass(-4000, 4000)),
-        AnalogMode("dmr", "DMR", bandpass=Bandpass(-4000, 4000), requirements=["digital_voice_digiham"], squelch=False),
-        AnalogMode("dstar", "D-Star", bandpass=Bandpass(-3250, 3250), requirements=["digital_voice_digiham"], squelch=False),
+        AnalogMode("dmr", "DMR", bandpass=Bandpass(-6250, 6250), requirements=["digital_voice_digiham"], squelch=False),
+        AnalogMode(
+            "dstar", "D-Star", bandpass=Bandpass(-3250, 3250), requirements=["digital_voice_digiham"], squelch=False
+        ),
         AnalogMode("nxdn", "NXDN", bandpass=Bandpass(-3250, 3250), requirements=["digital_voice_digiham"], squelch=False),
-        AnalogMode("ysf", "YSF", bandpass=Bandpass(-4000, 4000), requirements=["digital_voice_digiham"], squelch=False),
-        AnalogMode("m17", "M17", bandpass=Bandpass(-4000, 4000), requirements=["digital_voice_m17"], squelch=False),
-        AnalogMode("freedv", "FreeDV", bandpass=Bandpass(300, 3000), requirements=["digital_voice_freedv"], squelch=False),
+        AnalogMode("ysf", "YSF", bandpass=Bandpass(-6250, 6250), requirements=["digital_voice_digiham"], squelch=False),
+        AnalogMode("m17", "M17", bandpass=Bandpass(-6250, 6250), requirements=["digital_voice_m17"], squelch=False),
+        AnalogMode(
+            "freedv", "FreeDV", bandpass=Bandpass(300, 3000), requirements=["digital_voice_freedv"], squelch=False
+        ),
         AnalogMode("drm", "DRM", bandpass=Bandpass(-5000, 5000), requirements=["drm"], squelch=False),
         DigitalMode("bpsk31", "BPSK31", underlying=["usb"]),
         DigitalMode("bpsk63", "BPSK63", underlying=["usb"]),
+        DigitalMode("rtty170", "RTTY-170 (45)", underlying=["usb", "lsb"]),
+        DigitalMode("rtty450", "RTTY-450 (50N)", underlying=["usb", "lsb"]),
+        DigitalMode("rtty85", "RTTY-85 (50N)", underlying=["usb", "lsb"]),
+        DigitalMode("sitorb", "SITOR-B", underlying=["usb"]),
+# Currently in development
+#        DigitalMode("dsc", "DSC", underlying=["usb"]),
         WsjtMode("ft8", "FT8"),
         WsjtMode("ft4", "FT4"),
         WsjtMode("jt65", "JT65"),
@@ -129,7 +154,7 @@ class Modes(object):
         DigitalMode(
             "packet",
             "Packet",
-            underlying=["nfm", "usb", "lsb"],
+            underlying=["empty"], #["nfm", "usb", "lsb"],
             bandpass=Bandpass(-6250, 6250),
             requirements=["packet"],
             service=True,
@@ -138,7 +163,7 @@ class Modes(object):
         DigitalMode(
             "ais",
             "AIS",
-            underlying=["nfm"],
+            underlying=["empty"], #["nfm"],
             bandpass=Bandpass(-6250, 6250),
             requirements=["packet"],
             service=True,
@@ -157,19 +182,20 @@ class Modes(object):
         DigitalMode(
             "page",
             "Page",
-            underlying=["nfm"],
+            underlying=["empty"],
             bandpass=Bandpass(-6000, 6000),
             requirements=["page"],
             service=True,
             squelch=False,
         ),
-        DigitalMode("cwdecoder", "CWDecoder", underlying=["usb"]),
-        DigitalMode("rtty170", "RTTY-170", underlying=["usb"]),
-        DigitalMode("rtty450", "RTTY-450", underlying=["usb"]),
+        DigitalMode("cwdecoder", "CW Decoder", underlying=["usb", "lsb"]),
+# Replaced by Jakob's RTTY decoder
+#        DigitalMode("mfrtty170", "RTTY-170", underlying=["usb"]),
+#        DigitalMode("mfrtty450", "RTTY-450", underlying=["usb"]),
         DigitalMode(
             "sstv",
             "SSTV",
-            underlying=["usb", "lsb"],
+            underlying=["usb", "lsb", "nfm"],
             service=True,
             squelch=True,
         ),
@@ -197,20 +223,58 @@ class Modes(object):
         DigitalMode(
             "ism",
             "ISM",
-            underlying=["nfm"],
+            underlying=["empty"],
             bandpass=Bandpass(-125000, 125000),
             requirements=["ism"],
             service=True,
             squelch=False
         ),
         DigitalMode(
+            "rds",
+            "RDS",
+            underlying=["wfm"],
+            bandpass=Bandpass(-75000, 75000),
+            requirements=["rds"],
+            service=False,
+            squelch=False,
+            secondaryFft=False
+        ),
+        DigitalMode(
             "hfdl",
             "HFDL",
-            underlying=["usb"],
+            underlying=["empty"],
             bandpass=Bandpass(0, 3000),
             requirements=["hfdl"],
             service=True,
             squelch=False
+        ),
+        DigitalMode(
+            "vdl2",
+            "VDL2",
+            underlying=["empty"],
+            bandpass=Bandpass(-12500, 12500),
+            requirements=["vdl2"],
+            service=True,
+            squelch=False
+        ),
+        DigitalMode(
+            "acars",
+            "ACARS",
+            underlying=["am"],
+            bandpass=Bandpass(-6250, 6250),
+            requirements=["acars"],
+            service=True,
+            squelch=False
+        ),
+        DigitalMode(
+            "adsb",
+            "ADSB",
+            underlying=["empty"],
+            bandpass=Bandpass(-1200000, 1200000),
+            requirements=["adsb"],
+            service=True,
+            squelch=False,
+            secondaryFft=False
         ),
     ]
 

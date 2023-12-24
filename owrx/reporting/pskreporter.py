@@ -27,7 +27,7 @@ class PskReporter(Reporter):
         Supports all valid MODE and SUBMODE values from the ADIF standard.
 
         Current version at the time of the last change:
-        https://www.adif.org/312/ADIF_312.htm#Mode_Enumeration
+        https://www.adif.org/314/ADIF_314.htm#Mode_Enumeration
         """
         return ["FT8", "FT4", "JT9", "JT65", "FST4", "JS8", "Q65", "WSPR", "FST4W", "MSK144"]
 
@@ -105,27 +105,34 @@ class Uploader(object):
         # filter out any erroneous encodes
         encoded = [e for e in encoded if e is not None]
 
-        def chunks(l, n):
-            """Yield successive n-sized chunks from l."""
-            for i in range(0, len(l), n):
-                yield l[i : i + n]
+        def chunks(block, max_size):
+            size = 0
+            current = []
+            for r in block:
+                if size + len(r) > max_size:
+                    yield current
+                    current = []
+                    size = 0
+                size += len(r)
+                current.append(r)
+            yield current
 
         rHeader = self.getReceiverInformationHeader()
         rInfo = self.getReceiverInformation()
         sHeader = self.getSenderInformationHeader()
 
         packets = []
-        # 50 seems to be a safe bet
-        for chunk in chunks(encoded, 50):
+        # 1200 bytes of sender data should keep the packet size below MTU for most cases
+        for chunk in chunks(encoded, 1200):
             sInfo = self.getSenderInformation(chunk)
             length = 16 + len(rHeader) + len(sHeader) + len(rInfo) + len(sInfo)
             header = self.getHeader(length)
             packets.append(header + rHeader + sHeader + rInfo + sInfo)
+            self.sequence = (self.sequence + len(chunk)) % (1 << 32)
 
         return packets
 
     def getHeader(self, length):
-        self.sequence += 1
         return bytes(
             # protocol version
             [0x00, 0x0A]
@@ -142,7 +149,7 @@ class Uploader(object):
         try:
             return bytes(
                 self.encodeString(spot["callsign"])
-                + list(int(spot["freq"]).to_bytes(4, "big"))
+                + list(int(spot["freq"]).to_bytes(5, "big"))
                 + list(int(spot["db"]).to_bytes(1, "big", signed=True))
                 + self.encodeString(spot["mode"])
                 + self.encodeString(spot["locator"])
@@ -208,7 +215,7 @@ class Uploader(object):
             # senderCallsign
             + [0x80, 0x01, 0xFF, 0xFF, 0x00, 0x00, 0x76, 0x8F]
             # frequency
-            + [0x80, 0x05, 0x00, 0x04, 0x00, 0x00, 0x76, 0x8F]
+            + [0x80, 0x05, 0x00, 0x05, 0x00, 0x00, 0x76, 0x8F]
             # sNR
             + [0x80, 0x06, 0x00, 0x01, 0x00, 0x00, 0x76, 0x8F]
             # mode

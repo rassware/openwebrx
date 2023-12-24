@@ -13,11 +13,12 @@ from owrx.socket import getAvailablePort
 from owrx.property import PropertyStack, PropertyLayer, PropertyFilter, PropertyCarousel, PropertyDeleted
 from owrx.property.filter import ByLambda
 from owrx.form.input import Input, TextInput, NumberInput, CheckboxInput, ModesInput, ExponentialInput, DropdownInput, Option
-from owrx.form.input.converter import OptionalConverter, IntConverter
+from owrx.form.input.converter import Converter, OptionalConverter, IntConverter
 from owrx.form.input.device import GainInput, SchedulerInput, WaterfallLevelsInput
-from owrx.form.input.validator import RequiredValidator
+from owrx.form.input.validator import RequiredValidator, RangeValidator
 from owrx.form.section import OptionalSection
 from owrx.feature import FeatureDetector
+from owrx.log import LogPipe, HistoryHandler
 from typing import List
 from enum import Enum
 
@@ -114,6 +115,10 @@ class SdrSource(ABC):
         self.commandMapper = None
         self.tcpSource = None
         self.buffer = None
+        self.logger = logger.getChild(id) if id is not None else logger
+        self.logger.addHandler(HistoryHandler.getHandler(self.logger.name))
+        self.stdoutPipe = None
+        self.stderrPipe = None
 
         self.props = PropertyStack()
         self.profileCarousel = SdrProfileCarousel(props)
@@ -170,7 +175,7 @@ class SdrSource(ABC):
         self.busyState = SdrBusyState.IDLE
         self.restartTimer = None
         self.maxRetries = 10
-        self.retryDelay = 60
+        self.retryDelay = 15
         self.retryCount = 0
 
         self.validateProfiles()
@@ -213,17 +218,17 @@ class SdrSource(ABC):
         for id, p in self.props["profiles"].items():
             props.replaceLayer(0, p)
             if "center_freq" not in props:
-                logger.warning('Profile "%s" does not specify a center_freq', id)
+                self.logger.warning('Profile "%s" does not specify a center_freq', id)
                 continue
             if "samp_rate" not in props:
-                logger.warning('Profile "%s" does not specify a samp_rate', id)
+                self.logger.warning('Profile "%s" does not specify a samp_rate', id)
                 continue
             if "start_freq" in props:
                 start_freq = props["start_freq"]
                 srh = props["samp_rate"] / 2
                 center_freq = props["center_freq"]
                 if start_freq < center_freq - srh or start_freq > center_freq + srh:
-                    logger.warning('start_freq for profile "%s" is out of range', id)
+                    self.logger.warning('start_freq for profile "%s" is out of range', id)
 
     def isAlwaysOn(self):
         return "always-on" in self.props and self.props["always-on"]
@@ -252,12 +257,13 @@ class SdrSource(ABC):
     def getCommand(self):
         return [self.getCommandMapper().map(self.getCommandValues())]
 
-    def activateProfile(self, profile_id, force=False):
-        logger.debug("activating profile {0} for {1}".format(profile_id, self.getId()))
+    def activateProfile(self, profile_id):
         try:
-            self.profileCarousel.switch(profile_id, force=force)
+            profile_name = self.getProfiles()[profile_id]["name"]
+            self.logger.debug("activating profile \"%s\" for \"%s\"", profile_name, self.getName())
+            self.profileCarousel.switch(profile_id)
         except KeyError:
-            logger.warning("invalid profile %s for sdr %s. ignoring", profile_id, self.getId())
+            self.logger.warning("invalid profile %s for sdr %s. ignoring", profile_id, self.getId())
 
     def setCenterFreq(self, frequency):
         self.props["center_freq"] = frequency
@@ -273,6 +279,9 @@ class SdrSource(ABC):
 
     def getName(self):
         return self.props["name"]
+
+    def getProfileName(self):
+        return self.getProfiles()[self.getProfileId()]["name"]
 
     def getProps(self):
         return self.props
@@ -327,23 +336,37 @@ class SdrSource(ABC):
             try:
                 self.preStart()
             except Exception:
-                logger.exception("Exception during preStart()")
+                self.logger.exception("Exception during preStart()")
 
             cmd = self.getCommand()
             cmd = [c for c in cmd if c is not None]
+
+            self.stdoutPipe = LogPipe(logging.INFO, self.logger, "STDOUT")
+            self.stderrPipe = LogPipe(logging.WARNING, self.logger, "STDERR")
 
             # don't use shell mode for commands without piping
             if len(cmd) > 1:
                 # multiple commands with pipes
                 cmd = "|".join(cmd)
-                self.process = subprocess.Popen(cmd, shell=True, start_new_session=True)
+                self.process = subprocess.Popen(
+                    cmd,
+                    shell=True,
+                    start_new_session=True,
+                    stdout=self.stdoutPipe,
+                    stderr=self.stderrPipe
+                )
             else:
                 # single command
                 cmd = cmd[0]
                 # start_new_session can go as soon as there's no piped commands left
                 # the os.killpg call must be replaced with something more reasonable at the same time
-                self.process = subprocess.Popen(shlex.split(cmd), start_new_session=True)
-            logger.info("Started sdr source: " + cmd)
+                self.process = subprocess.Popen(
+                    shlex.split(cmd),
+                    start_new_session=True,
+                    stdout=self.stdoutPipe,
+                    stderr=self.stderrPipe
+                )
+            self.logger.info("Started sdr source: " + cmd)
 
             available = False
             failed = False
@@ -351,16 +374,18 @@ class SdrSource(ABC):
             def wait_for_process_to_end():
                 nonlocal failed
                 rc = self.process.wait()
-                logger.debug("shut down with RC={0}".format(rc))
+                self.logger.debug("shut down with RC={0}".format(rc))
                 self.process = None
                 self.monitor = None
+                self.stdoutPipe.close()
+                self.stdoutPipe = None
+                self.stderrPipe.close()
+                self.stderrPipe = None
                 if self.getState() is SdrSourceState.RUNNING:
-                    # @@@ TODO: get back to this and figure out what to do!
                     self.fail()
                 else:
                     failed = True
                 self.setState(SdrSourceState.STOPPED)
-                self.retryCount = 0
 
             self.monitor = threading.Thread(target=wait_for_process_to_end, name="source_monitor")
             self.monitor.start()
@@ -386,7 +411,7 @@ class SdrSource(ABC):
             try:
                 self.postStart()
             except Exception:
-                logger.exception("Exception during postStart()")
+                self.logger.exception("Exception during postStart()")
                 failed = True
 
         # count startup retries
@@ -395,16 +420,16 @@ class SdrSource(ABC):
         if not failed:
             # startup succeeded
             if self.retryCount > 1:
-                logger.debug("Source running after {0} start attempts.".format(self.retryCount))
+                self.logger.debug("Source running after {0} start attempts.".format(self.retryCount))
             self.setState(SdrSourceState.RUNNING)
             self.retryCount = 0
         elif self.retryCount < self.maxRetries:
             # startup failed, retry in a minute
-            logger.debug("Source start attempt {0}/{1} failed.".format(self.retryCount, self.maxRetries))
+            self.logger.debug("Source start attempt {0}/{1} failed.".format(self.retryCount, self.maxRetries))
             self._scheduleRestart()
         else:
             # startup repeatedly failed, consider device failed
-            logger.debug("Source repeatedly failed to start, writing it off.")
+            self.logger.debug("Source repeatedly failed to start, writing it off.")
             self.fail()
 
     def preStart(self):
@@ -439,7 +464,7 @@ class SdrSource(ABC):
                         self.monitor.join(10)
                         # if the monitor is still running, the process still hasn't ended, so kill it
                     if self.monitor:
-                        logger.warning("source has not shut down normally within 10 seconds, sending SIGKILL")
+                        self.logger.warning("source has not shut down normally within 10 seconds, sending SIGKILL")
                         os.killpg(os.getpgid(self.process.pid), signal.SIGKILL)
                 except ProcessLookupError:
                     # been killed by something else, ignore
@@ -547,6 +572,32 @@ class SdrDeviceDescriptionMissing(Exception):
     pass
 
 
+class SdrDeviceTypeConverter(Converter):
+    def convert_to_form(self, value):
+        # local import due to circular dependendies
+        types = SdrDeviceDescription.getTypes()
+        if value in types:
+            return types[value]
+        return value
+
+    def convert_from_form(self, value):
+        return None
+
+
+class SdrDeviceTypeDisplay(Input):
+    """
+    Not an input per se, just an element that can display the SDR device type in the web config
+    """
+    def __init__(self, id, label):
+        super().__init__(id, label, disabled=True)
+
+    def defaultConverter(self):
+        return SdrDeviceTypeConverter()
+
+    def parse(self, data):
+        return {}
+
+
 class SdrDeviceDescription(object):
     @staticmethod
     def getByType(sdr_type: str) -> "SdrDeviceDescription":
@@ -604,6 +655,7 @@ class SdrDeviceDescription(object):
 
     def getInputs(self) -> List[Input]:
         return [
+            SdrDeviceTypeDisplay("type", "Device type"),
             CheckboxInput("enabled", "Enable this device", converter=OptionalConverter(defaultFormValue=True)),
             CheckboxInput(
                 "always-on",
@@ -632,18 +684,41 @@ class SdrDeviceDescription(object):
                 + " device. <br/> Formula: Center frequency + oscillator offset = sdr tune frequency",
             ),
             WaterfallLevelsInput("waterfall_levels", "Waterfall levels"),
+            CheckboxInput(
+                "waterfall_auto_level_default_mode",
+                "Automatically adjust waterfall level by default",
+                infotext="Enable this to automatically enable auto adjusting waterfall levels on page load.",
+            ),
             SchedulerInput("scheduler", "Scheduler"),
             ExponentialInput("center_freq", "Center frequency", "Hz"),
             ExponentialInput("samp_rate", "Sample rate", "S/s"),
             ExponentialInput("start_freq", "Initial frequency", "Hz"),
             ModesInput("start_mod", "Initial modulation"),
+            NumberInput("initial_squelch_level", "Initial squelch level", append="dBFS"),
             DropdownInput(
                 "tuning_step",
                 "Tuning step",
                 options=[Option(str(i), "{} Hz".format(i)) for i in [1, 10, 20, 50, 100, 500, 1000, 2500, 3000, 5000, 6000, 6250, 8330, 9000, 10000, 12000, 12500, 25000, 50000]],
                 converter=IntConverter(),
             ),
-            NumberInput("initial_squelch_level", "Initial squelch level", append="dBFS"),
+            NumberInput(
+                "eibi_bookmarks_range",
+                "Shortwave bookmarks range",
+                infotext="Specifies the distance from the receiver location to "
+                + "search EIBI schedules for stations when creating automatic "
+                + "bookmarks. Set to 0 to disable automatic EIBI bookmarks.",
+                validator=RangeValidator(0, 25000),
+                append="km",
+            ),
+            NumberInput(
+                "repeater_range",
+                "Repeater bookmarks range",
+                infotext="Specifies the distance from the receiver location to "
+                + "search RepeaterBook.com for repeaters when creating automatic "
+                + "bookmarks. Set to 0 to disable automatic repeater bookmarks.",
+                validator=RangeValidator(0, 100),
+                append="km",
+            ),
         ]
 
     def hasAgc(self):
@@ -671,7 +746,15 @@ class SdrDeviceDescription(object):
         return ["name", "center_freq", "samp_rate", "start_freq", "start_mod", "tuning_step"]
 
     def getProfileOptionalKeys(self):
-        return ["initial_squelch_level", "rf_gain", "lfo_offset", "waterfall_levels"]
+        return [
+            "initial_squelch_level",
+            "rf_gain",
+            "lfo_offset",
+            "waterfall_levels",
+            "waterfall_auto_level_default_mode",
+            "eibi_bookmarks_range",
+            "repeater_range"
+        ]
 
     def getDeviceSection(self):
         return OptionalSection(

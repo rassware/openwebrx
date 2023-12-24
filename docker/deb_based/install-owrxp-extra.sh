@@ -19,6 +19,7 @@ function cmakebuild() {
   rm -rf $1
 }
 
+export MARCH=native
 case `uname -m` in
     arm*)
         SDRPLAY_BINARY=SDRplay_RSP_API-ARM32-3.07.2.run
@@ -28,12 +29,13 @@ case `uname -m` in
         ;;
     x86_64*)
         SDRPLAY_BINARY=SDRplay_RSP_API-Linux-3.07.1.run
+        export MARCH=x86-64
         ;;
 esac
 
 
 echo "+ Install dev packages..."
-BUILD_PACKAGES="git cmake make patch wget sudo gcc g++ libusb-1.0-0-dev libsoapysdr-dev debhelper cmake libprotobuf-dev protobuf-compiler libcodecserver-dev build-essential xxd qt5-qmake libpulse-dev libfaad-dev libopus-dev libfftw3-dev  pkg-config libglib2.0-dev libconfig++-dev libliquid-dev libairspyhf-dev libpopt-dev libiio-dev libad9361-dev libhidapi-dev libasound2-dev qtmultimedia5-dev  libqt5serialport5-dev qttools5-dev qttools5-dev-tools libboost-all-dev libfftw3-dev libreadline-dev libusb-1.0-0-dev libudev-dev asciidoctor gfortran libhamlib-dev"
+BUILD_PACKAGES="git cmake make patch wget sudo gcc g++ libusb-1.0-0-dev libsoapysdr-dev debhelper cmake libprotobuf-dev protobuf-compiler libcodecserver-dev build-essential xxd qt5-qmake libpulse-dev libfaad-dev libopus-dev libfftw3-dev  pkg-config libglib2.0-dev libconfig++-dev libliquid-dev libairspyhf-dev libpopt-dev libiio-dev libad9361-dev libhidapi-dev libasound2-dev qtmultimedia5-dev  libqt5serialport5-dev qttools5-dev qttools5-dev-tools libboost-all-dev libfftw3-dev libreadline-dev libusb-1.0-0-dev libudev-dev asciidoctor gfortran libhamlib-dev libsndfile1-dev libliquid-dev autoconf build-essential automake"
 apt-get -y install --no-install-recommends $BUILD_PACKAGES
 
 echo "+ Install SDRPlay..."
@@ -47,11 +49,18 @@ cd ..
 rm -rf sdrplay
 rm $SDRPLAY_BINARY
 
+echo "+ Install redsea (RDS)"
+git clone https://github.com/windytan/redsea.git
+pushd redsea
+./autogen.sh && ./configure && make && make install
+popd
+
 echo "+ Install PerseusSDR..."
 git clone https://github.com/Microtelecom/libperseus-sdr.git
 cd libperseus-sdr
 # latest from master as of 2020-09-04
 git checkout c2c95daeaa08bf0daed0e8ada970ab17cc264e1b
+sed -i 's/-march=native/-march='${MARCH}'/g' configure.ac
 ./bootstrap.sh
 ./configure
 make
@@ -103,12 +112,20 @@ mv /files/wsjtx/wsjtx.patch ${WSJT_DIR}
 cmakebuild ${WSJT_DIR}
 rm ${WSJT_TGZ}
 
-echo "+ Install HFDL..."
+echo "+ Install ACARSDEC..."
 git clone https://github.com/szpajder/libacars.git
 cmakebuild libacars v2.1.4
 
+git clone https://github.com/TLeconte/acarsdec.git
+sed -i 's/-march=native/-march='${MARCH}'/g' acarsdec/CMakeLists.txt
+cmakebuild acarsdec
+
+echo "+ Install HFDL..."
 git clone https://github.com/szpajder/dumphfdl.git
 cmakebuild dumphfdl v1.4.1
+
+git clone https://github.com/szpajder/dumpvdl2.git
+cmakebuild dumpvdl2
 
 echo "+ Install Dream (DRM)..."
 wget https://downloads.sourceforge.net/project/drm/dream/2.1.1/dream-2.1.1-svn808.tar.gz

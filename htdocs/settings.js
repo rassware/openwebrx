@@ -8,4 +8,6 @@ $(function(){
     $('.optional-section').optionalSection();
     $('#scheduler').schedulerInput();
     $('.exponential-input').exponentialInput();
+    $('.device-log-messages').logMessages();
+    $('.client-list').clientList();
 });

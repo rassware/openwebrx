@@ -1,3 +1,205 @@
+**1.2.43**
+- Added support for JS plugins developed by Stanislav Lechev.
+- Added option to switch between US and EU RDS decoding.
+- Added option to show dits and dahs when decoding CW.
+- Refactored and improved CW, SITOR-B, and CCIR476 decoders.
+- Reorganized "Demodulation and Decoding" settings page.
+- Fixed info bubble not updating in Google map.
+- Fixed resizing RDS display on mobile devices.
+- Fixed date/time parsing in RDS display.
+- Fixed CW decoder to print underscores for unrecognized characters.
+
+**1.2.42**
+- Added broadcast FM RDS decoder, using Redsea.
+- Added bind_address core configuration parameter.
+- Descreased SDR initialization retry time to 15 seconds.
+- Stopped some failed sources from restarting indefinitely.
+- Enabled nano-scroller in relevant panels on startup.
+
+**1.2.41**
+- Added message broadcasting function for admin.
+- Added ability to disable chat between clients.
+- Fixed Settings crash when a client has no SDR selected.
+- Fixed colors resetting when tuning outside profile.
+- Leaflet map now saves map and layer selections.
+
+**1.2.40**
+- Added chat between currently connected users.
+- Added ability to manage clients connected via reverse proxy.
+- The proxy has to provide correct X-Forwarded-For header.
+- Relaxed policy so that only socket connections are banned.
+- Moved all client-related code to client.py.
+- Moved ColorCache implementation to color.py.
+
+**1.2.39**
+- Added connected clients display to the Settings page.
+- Added ability to ban clients for chosen amount of time.
+- Added ability to unban previously banned clients.
+- Fixed agent string to make RepeaterBook work.
+- Disabled buffering when saving logs from background decoders.
+
+**1.2.38**
+- Fixed primary modulation change with digital decoders.
+- Fixed secondary frequency when changing bandpass.
+- Fixed digital voice panel colors.
+- Fixed volume and mute controls.
+- Fixed NR controls.
+- Added explanation of the RSPdx HDR mode.
+- Updated HPSDR settings to Jakob's latest version.
+- Allowed LSB as underlying CW decoder mode.
+
+**1.2.37**
+- Added "Settings" UI section for configuring user interface.
+- Saving receiver and map UI settings in the browser storage.
+- Removed themes, opacity, frame, wheel options from server settings.
+- Animated UI sections collapse and expansion.
+- Added RTTY, NAVTEX, and MSI bookmarks at proper offsets.
+- Added "Black" UI theme.
+
+**1.2.36**
+- Added several UI themes, switched via "User interface color scheme".
+- Made text console window contain more text (RTTY, CW, etc).
+- Added nano-scroller to the text console window.
+- Switched back to LRGB for mixing locator colors.
+- Renamed "Range" section to "Display".
+
+**1.2.35**
+- Added SITOR-B / NAVTEX decoder.
+- Fixed AIS map information bubbles.
+- Used underscores for unrecognized CW/RTTY characters.
+
+**1.2.34**
+- Reworked locator info, adding colored band/mode designators.
+- Improved locator square colors to also reflect reports' age.
+- Linked HAM callsigns and AIS vessel IDs to respective websites.
+- Added country name tooltips to HAM callsigns and AIS vessel IDs.
+- Hopefully fixed FAX decoder randomly restarting on a new page.
+- Moved common JavaScript functions to Utils.js.
+- Fixed links on HFDL flight reports.
+- Silenced EIBI log warnings.
+
+**1.2.33**
+- Syncing library versions with original OWRX 1.2.2.
+- Refactored locators map display.
+- Assigned each locator a single rectangle.
+- Rectangle's transparency reflects number and age of reports.
+- Rectangle's hue represents reported bands.
+- Removed overlapping edges from rectangles.
+- Added time-to-live to EIBI markers.
+- Added LSimpleMarker.
+- Fixed, updated, optimized EIBI database algorithms and data.
+- Fixed aircraft time-to-live values.
+
+**1.2.32**
+- Added separate display for ADSB flight data.
+- Added separate class of aircraft markers.
+- Added aircraft icons, by type and category.
+- Added optional time-to-live to map markers.
+- Added ability to run Tar1090 map together with OWRX+.
+- Added squawk and signal strength to ADSB info bubbles.
+- Now showing aircraft speed in knots, altitude in feet.
+- Now using Dump1090 JSON data directly (via /tmp/dump1090).
+- Optimized and simplified features display on the map.
+- Fixed aircraft title linkify(), VDL2 altitudes, etc.
+- Fixed Leaflet information bubbles.
+
+**1.2.31**
+- Added display of latest aircraft messages to the map.
+- Adding parsing of the dump1090 JSON output (in progress).
+- No longer preferring shorter EIBI entries to longer ones.
+- Now loading fresh EIBI schedule every 24 hours.
+- Fixed background ACARS service.
+- Fixed missing SAM modulation.
+- Fixed map info bubble formatting.
+- Optimized locking in RepeaterBook and EIBI modules.
+
+**1.2.30**
+- Updated OpenWebRX+ with changes from Jakob's develop branch.
+- Added Jakob's RTTY decoder and made it the default.
+- Added ACARS aircraft protocol decoder, using AcarsDec.
+- Added aircraft manager fusing data from multiple sources.
+- Added background mode for HFDL, VDL2, ADSB, ACARS decoders.
+- Added background aircraft map position updates.
+- Added origin and destionation airport display (ACARS).
+- Added links from aircraft messages to the map.
+- Added default bookmarks for ACARS frequencies.
+- Added SDRPlay High Dynamic Resolution (HDR) option.
+- Device log now shown at the device settings page.
+- Fixed a crash after switching from ADSB to other profiles.
+- Fixed linkify() failing on aircraft IDs containing dash.
+- Fixed repeater bookmarks to report NFM modulation.
+- Fixed some APRS symbols to face east.
+- Converting flight IDs from IATA (AAnnnn) to ICAO (AAAnnnn).
+- Switched many digital IQ decoders to use EMPTY modulation.
+- Switched TextParser to LineBasedModule base.
+- Switched ISM decoder to use ExecModule.
+- Optimized MultiMon-based digital decoders.
+- Removed secondary ADSB waterfall to improve performance.
+- Painted YES/NO feature indicators red and green.
+- Changed MODE-S ID lookup URL to FlightAware.
+
+**1.2.29**
+- Added worldwide OpenWeatherMap support (needs key).
+- Added NFM to SSTV underlying modes (needs testing).
+- Added configurable FAX options (post-processing, etc).
+- Added configurable aircraft data expiration times.
+- Improved aircraft data maintenance and merging.
+- Improved SWL bookmarks generation (via EIBI).
+- Improved FAX decoding, can receive photos now.
+- Changed FAX bookmarks to be 1.9kHz below carrier.
+- Dropped FAX input frequency to 12kHz.
+- Optimized SSTV, FAX, RTTY, and CW decoders.
+- Fixed ISM parser with correct ColorCache object.
+- ADSB airplanes are red now, VDL2/HFDL are blue.
+
+**1.2.28**
+- Updated CSDR and PyCSDR with latest changes from Jakob's develop branch.
+- DumpHFDL, DumpVDL2, and Dump1090 now available from Jakob's repository.
+- Added ADSB aircraft protocol decoder, using Dump1090 and ExecModule.
+- Added AircraftManager storing data from all aircraft decoders.
+- Added DumpHFDL, DumpVDL2, Dump1090 to recommended packages.
+- Added Mode-S (ADSB) message parser by Jakob Ketterl.
+- Added OpenSeaMap and WeatherRadar Leaflet layers by Stanislav Lechev.
+- Added shadows to aircraft on the map, based on altitudes.
+- Improved aircraft message display, common for all three decoders.
+- Fixed OpenWebRX service hanging up when stopped.
+- Fixed orientation of north-facing APRS symbols.
+- Fixed VDL2 logs not showing up in file browser.
+- Changed rf_gain in the default SDRPlay profile to "auto".
+- RepeaterBook now queried for up to 200km.
+
+**1.2.27**
+- Added VDL2 aircraft protocol decoder, using DumpVDL2.
+- Added standard VDL2 frequencies to the default bookmarks.
+- VDL2 data is shown both as text and as map markers.
+- Added repeater search via RepeaterBook.com.
+- Added range setting (km) for showing repeaters in.
+- Repeaters are shown both on the map and as bookmarks.
+- Fixed non-APRS (YSF, etc) markers not showing up.
+- Further improved parsing EIBI schedules.
+- Simplified a lot of JavaScript code.
+
+**1.2.26**
+- Added autogenerated bookmarks based on EIBI schedules.
+- Set bookmark search range (km) in "Settings | General | Display".
+- The bookmark search range can also be set per profile.
+- Set range to 0km to disable autogenerated bookmarks (default).
+- Fixed locked source switch resetting it for all connections.
+- Separated default bookmarks by type, removing rarely used.
+- Fixed profile setting cues blowing up page layout.
+- Fixed fax frequency for Pevek.
+- Improved EIBI parser a bit.
+
+**1.2.25**
+- Refactored maps, extracting implementation independent code.
+- Added Leaflet-based maps by Stanislav Lechev (LZ2SLL).
+- OpenStreetMap and other free maps are available via Leaflet.
+- Default to Google or Leaflet maps via the Settings.
+- Clicking toolbar map button toggles between Google and Leaflet.
+- Clicking UTC clock display toggles map controls.
+- Added several more target areas to the EIBI parser.
+- Now assuming any EIBI entry below 4.8MHz to be USB (was 7MHz).
+
 **1.2.24**
 - Added support for EIBI shortwave schedules.
 - Schedules updated monthly from the EIBI website.

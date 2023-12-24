@@ -121,8 +121,9 @@ class Map(object):
 
     def removeLocation(self, callsign):
         with self.positionsLock:
-            del self.positions[callsign]
-            # TODO broadcast removal to clients
+            if callsign in self.positions:
+                del self.positions[callsign]
+                # TODO broadcast removal to clients
 
     def removeOldPositions(self):
         pm = Config.get()

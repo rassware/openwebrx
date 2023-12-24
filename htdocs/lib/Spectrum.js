@@ -13,7 +13,7 @@ function Spectrum(el, msec) {
 
     // Start with hidden spectrum display
     this.close();
-}
+};
 
 Spectrum.prototype.update = function(data) {
     // Do not update if no redraw timer or no canvas
@@ -114,7 +114,7 @@ Spectrum.prototype.close = function() {
 
     // Clear spectrum data
     this.data = [];
-}
+};
 
 Spectrum.prototype.open = function() {
     // Show container
@@ -125,9 +125,16 @@ Spectrum.prototype.open = function() {
         var me = this;
         this.timer = setInterval(function() { me.draw(); }, this.msec);
     }
-}
+};
 
-Spectrum.prototype.toggle = function() {
+Spectrum.prototype.toggle = function(on) {
+    // If no argument given, toggle spectrum
+    if (typeof(on) === 'undefined') on = !this.timer;
+
     // Toggle based on the current redraw timer state
-    if (this.timer) this.close(); else this.open();
+    if (this.timer && !on) {
+        this.close();
+    } else if (!this.timer && on) {
+        this.open();
+    }
 };

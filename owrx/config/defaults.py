@@ -2,7 +2,7 @@ from owrx.property import PropertyLayer
 
 
 defaultConfig = PropertyLayer(
-    version=7,
+    version=8,
     max_clients=20,
     receiver_name="[Callsign]",
     receiver_location="Budapest, Hungary",
@@ -97,15 +97,15 @@ defaultConfig = PropertyLayer(
             ),
         ),
         sdrplay=PropertyLayer(
-            name="SDRPlay RSP2",
+            name="SDRPlay device",
             type="sdrplay",
             antenna="Antenna A",
+            rf_gain="auto",
             profiles=PropertyLayer(
                 **{
                     "20m": PropertyLayer(
                         name="20m",
                         center_freq=14150000,
-                        rf_gain=0,
                         samp_rate=500000,
                         start_freq=14070000,
                         start_mod="usb",
@@ -114,7 +114,6 @@ defaultConfig = PropertyLayer(
                     "30m": PropertyLayer(
                         name="30m",
                         center_freq=10125000,
-                        rf_gain=0,
                         samp_rate=250000,
                         start_freq=10142000,
                         start_mod="usb",
@@ -123,7 +122,6 @@ defaultConfig = PropertyLayer(
                     "40m": PropertyLayer(
                         name="40m",
                         center_freq=7100000,
-                        rf_gain=0,
                         samp_rate=500000,
                         start_freq=7070000,
                         start_mod="lsb",
@@ -132,7 +130,6 @@ defaultConfig = PropertyLayer(
                     "80m": PropertyLayer(
                         name="80m",
                         center_freq=3650000,
-                        rf_gain=0,
                         samp_rate=500000,
                         start_freq=3570000,
                         start_mod="lsb",
@@ -141,7 +138,6 @@ defaultConfig = PropertyLayer(
                     "49m": PropertyLayer(
                         name="49m Broadcast",
                         center_freq=6000000,
-                        rf_gain=0,
                         samp_rate=500000,
                         start_freq=6070000,
                         start_mod="am",
@@ -154,23 +150,25 @@ defaultConfig = PropertyLayer(
     waterfall_scheme="GoogleTurboWaterfall",
     waterfall_levels=PropertyLayer(min=-88, max=-20),
     waterfall_auto_levels=PropertyLayer(min=3, max=10),
+    waterfall_auto_level_default_mode=False,
     waterfall_auto_min_range=50,
     key_locked=False,
-    ui_opacity=100,
-    ui_frame=False,
-    ui_swap_wheel=False,
     magic_key="memagic",
     allow_center_freq_changes=False,
     allow_audio_recording=True,
+    allow_chat=True,
     tuning_precision=2,
     squelch_auto_margin=10,
     google_maps_api_key="",
+    openweathermap_api_key="",
+    map_type="google",
     map_position_retention_time=2 * 60 * 60,
     map_prefer_recent_reports=True,
     map_ignore_indirect_reports=False,
     callsign_url="https://www.qrzcq.com/call/{}",
     vessel_url="https://www.vesselfinder.com/vessels/details/{}",
     flight_url="https://flightaware.com/live/flight/{}",
+    modes_url="https://flightaware.com/live/modes/{}/redirect",
     usage_policy_url="policy",
     session_timeout=0,
     keep_files=20,
@@ -201,4 +199,15 @@ defaultConfig = PropertyLayer(
     wsprnet_enabled=False,
     wsprnet_callsign="N0CALL",
     paging_filter=True,
+    eibi_bookmarks_range=0,
+    repeater_range=0,
+    adsb_ttl=900,
+    vdl2_ttl=1800,
+    hfdl_ttl=1800,
+    acars_ttl=1800,
+    fax_postprocess=True,
+    fax_color=False,
+    fax_am=False,
+    rds_usa=False,
+    cw_showcw=False
 ).readonly()

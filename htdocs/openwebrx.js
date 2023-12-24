@@ -34,13 +34,6 @@ var waterfall_setup_done = 0;
 var secondary_fft_size;
 var tuning_step_default = 1;
 var tuning_step = 1;
-var nr_enabled = false;
-var nr_threshold = 0;
-var swap_wheel = false;
-
-function updateVolume() {
-    audioEngine.setVolume(parseFloat($("#openwebrx-panel-volume").val()) / 100);
-}
 
 function toggleSection(el) {
     var next_el = el.nextElementSibling;
@@ -53,43 +46,6 @@ function toggleSection(el) {
             next_el.style.display = "none";
         }
     }
-}
-
-function toggleMute() {
-    var $muteButton = $('.openwebrx-mute-button');
-    var $volumePanel = $('#openwebrx-panel-volume');
-    if ($muteButton.hasClass('muted')) {
-        $muteButton.removeClass('muted');
-        $volumePanel.prop('disabled', false).val(volumeBeforeMute);
-    } else {
-        $muteButton.addClass('muted');
-        volumeBeforeMute = $volumePanel.val();
-        $volumePanel.prop('disabled', true).val(0);
-    }
-
-    updateVolume();
-}
-
-function updateNR() {
-    var $nrPanel = $('#openwebrx-panel-nr');
-
-    nr_threshold = Math.round(parseFloat($nrPanel.val()));
-    $nrPanel.attr('title', 'Noise level (' + nr_threshold + ' dB)');
-    nr_changed();
-}
-
-function toggleNR() {
-    var $nrPanel = $('#openwebrx-panel-nr');
-
-    if ($nrPanel.prop('disabled')) {
-        $nrPanel.prop('disabled', false);
-        nr_enabled = true;
-    } else {
-        $nrPanel.prop('disabled', true);
-        nr_enabled = false;
-    }
-
-    nr_changed();
 }
 
 function toggleRecording() {
@@ -170,6 +126,8 @@ var waterfall_max_level_default;
 var waterfall_colors = buildWaterfallColors(['#000', '#FFF']);
 var waterfall_auto_levels;
 var waterfall_auto_min_range;
+var waterfall_measure_minmax_now = false;
+var waterfall_measure_minmax_continuous = false;
 
 function buildWaterfallColors(input) {
     return chroma.scale(input).colors(256, 'rgb')
@@ -911,7 +869,7 @@ function canvas_mousewheel(evt) {
     // Zoom when mouse button down, tune otherwise
     // (optionally, invert this behavior)
     var zoom_me = (canvas_mouse2_down > 0) || evt.shiftKey?
-        !swap_wheel : swap_wheel;
+        !UI.getWheelSwap() : UI.getWheelSwap();
     if (zoom_me) {
         zoom_step(dir, relativeX, zoom_center_where_calc(evt.pageX));
     } else {
@@ -1021,12 +979,17 @@ function on_ws_recv(evt) {
                         if ('waterfall_levels' in config) {
                             waterfall_min_level_default = config['waterfall_levels']['min'];
                             waterfall_max_level_default = config['waterfall_levels']['max'];
-                            waterfallColorsDefault();
                         }
                         if ('waterfall_auto_levels' in config)
                             waterfall_auto_levels = config['waterfall_auto_levels'];
                         if ('waterfall_auto_min_range' in config)
                             waterfall_auto_min_range = config['waterfall_auto_min_range'];
+                        if ('waterfall_auto_level_default_mode' in config)
+                            waterfall_measure_minmax_continuous = config['waterfall_auto_level_default_mode'];
+
+                        var waterfallAutoButton = $('#openwebrx-waterfall-colors-auto');
+                        waterfallAutoButton[waterfall_measure_minmax_continuous ? 'addClass' : 'removeClass']('highlighted');
+                        $('#openwebrx-waterfall-color-min, #openwebrx-waterfall-color-max').prop('disabled', waterfall_measure_minmax_continuous);
 
                         var initial_demodulator_params = {};
                         if ('start_mod' in config)
@@ -1071,8 +1034,8 @@ function on_ws_recv(evt) {
                             $('#openwebrx-sdr-profiles-listbox').val(currentprofile.toString());
 
                             stopScanner();
-                            waterfallColorsDefault();
                             tuning_step_reset();
+                            waterfallColorsDefault();
                             waterfall_clear();
                             zoom_set(0);
                         }
@@ -1085,30 +1048,42 @@ function on_ws_recv(evt) {
                             tuning_step_reset();
                         }
 
-                        if ('ui_opacity' in config) {
-                            var x = config['ui_opacity'];
-                            x = x<10? 10 : x>100? 100 : x;
-                            $('.openwebrx-panel').css('opacity', x/100);
-                        }
-
-                        if ('ui_frame' in config) {
-                            var x = config['ui_frame'];
-                            $('#openwebrx-panel-receiver').css('border', x? '2px solid':'');
-                            $('#openwebrx-dialog-bookmark').css('border', x? '2px solid':'');
-                        }
-
-                        if ('ui_swap_wheel' in config) {
-                            swap_wheel = config['ui_swap_wheel'];
-                        }
-
                         if ('allow_audio_recording' in config) {
                             var x = config['allow_audio_recording'];
                             $('.openwebrx-record-button').css('display', x? '':'none');
                         }
 
+                        if ('allow_chat' in config) {
+                            var x = config['allow_chat'];
+                            $('#openwebrx-chat-inputs').css('display', x? '':'none');
+                            $('#openwebrx-chat-label').html(x? 'Chat':'Log');
+                        }
+
+                        if ('receiver_gps' in config) {
+                            var adsb_panel = $('#openwebrx-panel-adsb-message').adsbMessagePanel();
+                            adsb_panel.setReceiverPos(config['receiver_gps']);
+                        }
+
                         if ('flight_url' in config) {
-                            var panel = $('#openwebrx-panel-hfdl-message').hfdlMessagePanel();
-                            panel.setFlightUrl(config['flight_url']);
+                            var hfdl_panel = $('#openwebrx-panel-hfdl-message').hfdlMessagePanel();
+                            var adsb_panel = $('#openwebrx-panel-adsb-message').adsbMessagePanel();
+                            hfdl_panel.setFlightUrl(config['flight_url']);
+                            adsb_panel.setFlightUrl(config['flight_url']);
+                        }
+
+                        if ('modes_url' in config) {
+                            var hfdl_panel = $('#openwebrx-panel-hfdl-message').hfdlMessagePanel();
+                            var adsb_panel = $('#openwebrx-panel-adsb-message').adsbMessagePanel();
+                            hfdl_panel.setModeSUrl(config['modes_url']);
+                            adsb_panel.setModeSUrl(config['modes_url']);
+                        }
+
+                        if ('callsign_url' in config) {
+                            Utils.setCallsignUrl(config['callsign_url']);
+                        }
+
+                        if ('vessel_url' in config) {
+                            Utils.setVesselUrl(config['vessel_url']);
                         }
 
                         break;
@@ -1182,17 +1157,10 @@ function on_ws_recv(evt) {
                         break;
                     case 'secondary_demod':
                         var value = json['value'];
-                        var panels = [
-                            $("#openwebrx-panel-wsjt-message").wsjtMessagePanel(),
-                            $('#openwebrx-panel-packet-message').packetMessagePanel(),
-                            $('#openwebrx-panel-pocsag-message').pocsagMessagePanel(),
-                            $('#openwebrx-panel-page-message').pageMessagePanel(),
-                            $('#openwebrx-panel-hfdl-message').hfdlMessagePanel(),
-                            $('#openwebrx-panel-sstv-message').sstvMessagePanel(),
-                            $('#openwebrx-panel-fax-message').faxMessagePanel(),
-                            $('#openwebrx-panel-ism-message').ismMessagePanel(),
-                            $("#openwebrx-panel-js8-message").js8()
-                        ];
+                        var panels = ['wsjt', 'packet', 'pocsag', 'page', 'sstv', 'fax', 'ism', 'rds', 'hfdl', 'adsb'].map(function(id) {
+                            return $('#openwebrx-panel-' + id + '-message')[id + 'MessagePanel']();
+                        });
+                        panels.push($('#openwebrx-panel-js8-message').js8());
                         if (!panels.some(function(panel) {
                             if (!panel.supportsMessage(value)) return false;
                             panel.pushMessage(value);
@@ -1203,6 +1171,9 @@ function on_ws_recv(evt) {
                         break;
                     case 'log_message':
                         divlog(json['value'], true);
+                        break;
+                    case 'chat_message':
+                        Chat.recvMessage(json['name'], json['text'], json['color']);
                         break;
                     case 'backoff':
                         divlog("Server is currently busy: " + json['reason'], true);
@@ -1280,9 +1251,6 @@ function on_ws_recv(evt) {
     }
 }
 
-var waterfall_measure_minmax_now = false;
-var waterfall_measure_minmax_continuous = false;
-
 function waterfall_measure_minmax_do(what) {
     // Get visible range
     var range = get_visible_freq_range();
@@ -1336,8 +1304,8 @@ function divlog(what, is_error) {
         what = "<span class=\"webrx-error\">" + what + "</span>";
         toggle_panel("openwebrx-panel-log", true); //show panel if any error is present
     }
-    $('#openwebrx-debugdiv')[0].innerHTML += what + "<br />";
-    var nano = $('.nano');
+    $('#openwebrx-messages')[0].innerHTML += what + "<br />";
+    var nano = $('#openwebrx-log-scroll');
     nano.nanoScroller();
     nano.nanoScroller({scroll: 'bottom'});
 }
@@ -1361,8 +1329,9 @@ function onAudioStart(apiType){
         toggle_panel("openwebrx-panel-log", !!was_error);
     }, 2000);
 
-    //Synchronise volume with slider
-    updateVolume();
+    // Load user interface settings from local storage
+    UI.loadSettings();
+    Chat.loadSettings();
 }
 
 var reconnect_timeout = false;
@@ -1598,19 +1567,19 @@ function openwebrx_init() {
     initSpectrum();
     initPanels();
     $('#openwebrx-panel-receiver').demodulatorPanel();
-    window.addEventListener("resize", openwebrx_resize);
+    window.addEventListener('resize', openwebrx_resize);
     bookmarks = new BookmarkBar();
     scanner = new Scanner(bookmarks, 1000);
     initSliders();
 
     // Create and run clock
-    clock = new Clock($("#openwebrx-clock-utc"));
+    clock = new Clock($('#openwebrx-clock-utc'));
 }
 
 function initSliders() {
     $('#openwebrx-panel-receiver').on('wheel', 'input[type=range]', function(ev){
         var $slider = $(this);
-        if (!$slider.attr('step')) return;
+        if (!$slider.attr('step') || $slider.attr('disabled')) return;
         var val = Number($slider.val());
         var step = Number($slider.attr('step'));
         if (ev.originalEvent.deltaY > 0) {
@@ -1742,6 +1711,9 @@ function initPanels() {
         });
         if (panel_displayed(el)) first_show_panel(el);
     });
+
+    // Apply nano-scroller to all panels that have 'nano' class
+    $('.nano').nanoScroller();
 }
 
 function initSpectrum() {
@@ -1758,10 +1730,6 @@ function initSpectrum() {
 
     // Create spectrum display
     spectrum = new Spectrum(canvas, 150);
-}
-
-function toggleSpectrum() {
-    spectrum.toggle();
 }
 
 function stopScanner() {
@@ -1866,14 +1834,9 @@ function secondary_demod_init() {
         .mousedown(secondary_demod_canvas_container_mousedown)
         .mouseenter(secondary_demod_canvas_container_mousein)
         .mouseleave(secondary_demod_canvas_container_mouseleave);
-    $('#openwebrx-panel-wsjt-message').wsjtMessagePanel();
-    $('#openwebrx-panel-packet-message').packetMessagePanel();
-    $('#openwebrx-panel-pocsag-message').pocsagMessagePanel();
-    $('#openwebrx-panel-page-message').pageMessagePanel();
-    $('#openwebrx-panel-hfdl-message').hfdlMessagePanel();
-    $('#openwebrx-panel-sstv-message').sstvMessagePanel();
-    $('#openwebrx-panel-fax-message').faxMessagePanel();
-    $('#openwebrx-panel-ism-message').ismMessagePanel();
+    ['wsjt', 'packet', 'pocsag', 'page', 'sstv', 'fax', 'ism', 'rds', 'hfdl', 'adsb'].forEach(function(id){
+        $('#openwebrx-panel-' + id + '-message')[id + 'MessagePanel']();
+    })
     $('#openwebrx-panel-js8-message').js8();
 }
 
@@ -1882,15 +1845,19 @@ function secondary_demod_push_data(x) {
         var c = y.charCodeAt(0);
         return (c === 10 || (c >= 32 && c <= 126));
     }).map(function (y) {
-        if (y === "&")
-            return "&amp;";
+        if (y === "&") return "&amp;";
         if (y === "<") return "&lt;";
         if (y === ">") return "&gt;";
         if (y === " ") return "&nbsp;";
         if (y === "\n") return "<br />";
         return y;
     }).join("");
+
     $("#openwebrx-cursor-blink").before(x);
+
+    var nano = $('#openwebrx-digimode-content');
+    nano.nanoScroller();
+    nano.nanoScroller({scroll: 'bottom'});
 }
 
 function secondary_demod_waterfall_add(data) {
@@ -1975,6 +1942,15 @@ function secondary_demod_waterfall_set_zoom(low_cut, high_cut) {
             width: secondary_demod_canvas_width + "px"
         });
     });
+
+    // Make sure secondary demod frequency is within bandpass
+    var f = secondary_demod_channel_freq;
+    if ((f < low_cut) || (f > high_cut)) {
+        if ((-f >= low_cut) && (-f <= high_cut)) f = -f;
+        else f = Math.floor((low_cut + high_cut) / 2);
+        secondary_demod_channel_freq = f;
+    }
+
     secondary_demod_update_channel_freq_from_event();
 }
 
@@ -1993,14 +1969,4 @@ function tuning_step_changed() {
 function tuning_step_reset() {
     $('#openwebrx-tuning-step-listbox').val(tuning_step_default);
     tuning_step = tuning_step_default;
-}
-
-function nr_changed() {
-    ws.send(JSON.stringify({
-        "type": "connectionproperties",
-        "params": {
-            "nr_enabled": nr_enabled,
-            "nr_threshold": nr_threshold
-        }
-    }));
 }

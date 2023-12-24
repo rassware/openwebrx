@@ -6,6 +6,7 @@ from owrx.controllers.assets import OwrxAssetsController, AprsSymbolsController,
 from owrx.controllers.websocket import WebSocketController
 from owrx.controllers.api import ApiController
 from owrx.controllers.metrics import MetricsController
+from owrx.controllers.clients import ClientController
 from owrx.controllers.settings import SettingsController
 from owrx.controllers.settings.general import GeneralSettingsController
 from owrx.controllers.settings.sdr import (
@@ -29,6 +30,7 @@ from urllib.parse import urlparse, parse_qs
 import re
 from abc import ABC, abstractmethod
 from http.cookies import SimpleCookie
+from datetime import datetime
 
 import logging
 
@@ -158,6 +160,10 @@ class Router(object):
             StaticRoute(
                 "/settings/decoding", DecodingSettingsController, method="POST", options={"action": "processFormData"}
             ),
+            StaticRoute("/clients", ClientController),
+            StaticRoute("/ban", ClientController, method="POST", options={"action": "ban"}),
+            StaticRoute("/unban", ClientController, method="POST", options={"action": "unban"}),
+            StaticRoute("/broadcast", ClientController, method="POST", options={"action": "broadcast"}),
             StaticRoute("/login", SessionController, options={"action": "loginAction"}),
             StaticRoute("/login", SessionController, method="POST", options={"action": "processLoginAction"}),
             StaticRoute("/logout", SessionController, options={"action": "logoutAction"}),

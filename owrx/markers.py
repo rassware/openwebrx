@@ -1,8 +1,11 @@
 from owrx.config.core import CoreConfig
+from owrx.config import Config
+from owrx.version import openwebrx_version
 from owrx.map import Map, Location
 from owrx.aprs import getSymbolData
+from owrx.eibi import EIBI
+from owrx.repeaters import Repeaters
 from json import JSONEncoder
-from owrx.eibi import EIBI_Locations, EIBI
 from datetime import datetime
 
 import urllib
@@ -25,6 +28,8 @@ class MyJSONEncoder(JSONEncoder):
 class MarkerLocation(Location):
     def __init__(self, attrs):
         self.attrs = attrs
+        # Making sure older cached files load
+        self.attrs["type"] = "latlon"
 
     def getId(self):
         return self.attrs["id"]
@@ -94,6 +99,7 @@ class Markers(object):
     # Stop the main thread
     def stopThread(self):
         if self.thread is not None:
+            logger.debug("Stopping marker database thread.")
             self.event.set()
             self.thread.join()
 
@@ -105,6 +111,7 @@ class Markers(object):
         self.markers   = {}
         self.rxmarkers = {}
         self.txmarkers = {}
+        self.remarkers = {}
 
         # Load miscellaneous markers from local files
         for file in self.fileList:
@@ -127,11 +134,15 @@ class Markers(object):
         # Load current schedule from the EIBI database
         self.txmarkers = self.loadCurrentTransmitters()
 
+        # Load repeaters from the Repeaters database
+        self.remarkers = self.loadRepeaters()
+
         # Update map with markers
         logger.debug("Updating map...")
         self.updateMap(self.markers)
         self.updateMap(self.rxmarkers)
         self.updateMap(self.txmarkers)
+        self.updateMap(self.remarkers)
 
         #
         # Main Loop
@@ -256,6 +267,29 @@ class Markers(object):
     # Following functions scrape data from websites and internal databases
     #
 
+    def loadRepeaters(self, rangeKm: int = 200):
+        # No result yet
+        result = {}
+        # Refresh / load repeaters database, as needed
+        Repeaters.getSharedInstance().refresh()
+        # Load repeater sites from repeaters database
+        for entry in Repeaters.getSharedInstance().getAllInRange(rangeKm):
+            rl = MarkerLocation({
+                "type"    : "latlon",
+                "mode"    : "Repeaters",
+                "id"      : entry["name"],
+                "lat"     : entry["lat"],
+                "lon"     : entry["lon"],
+                "freq"    : entry["freq"],
+                "mmode"   : entry["mode"],
+                "status"  : entry["status"],
+                "updated" : entry["updated"],
+                "comment" : entry["comment"]
+            })
+            result[rl.getId()] = rl
+        # Done
+        return result
+
     def loadCurrentTransmitters(self):
         #url = "https://www.short-wave.info/index.php?txsite="
         url = "https://www.google.com/search?q="
@@ -275,24 +309,25 @@ class Markers(object):
             for row in schedule:
                 lang   = row["lang"]
                 target = row["tgt"]
-                if target not in targets:
+                if target and target not in targets:
                     targets[target] = True
                     comment += (", " if comment else " to ") + target
-                if lang not in langs:
+                if lang and lang not in langs:
                     langs[lang] = True
                     langstr += (", " if langstr else "") + re.sub(r"(:|\s*\().*$", "", lang)
 
             # Compose comment
-            comment = "Transmitting" + comment if comment else "Transmitter"
-            comment = comment + " (" + langstr + ")" if langstr else comment
+            comment = ("Transmitting" + comment) if comment else "Transmitter"
+            comment = (comment + " (" + langstr + ")") if langstr else comment
 
             rl = MarkerLocation({
-                "type"    : "feature",
+                "type"    : "latlon",
                 "mode"    : "Stations",
                 "comment" : comment,
                 "id"      : entry["name"],
                 "lat"     : entry["lat"],
                 "lon"     : entry["lon"],
+                "ttl"     : entry["ttl"] * 1000,
                 "url"     : url + urllib.parse.quote_plus(entry["name"]),
                 "schedule": schedule
             })
@@ -325,7 +360,7 @@ class Markers(object):
                         else:
                             dev = r["type"]
                         rl = MarkerLocation({
-                            "type"    : "feature",
+                            "type"    : "latlon",
                             "mode"    : r["type"],
                             "id"      : re.sub(r"^.*://(.*?)(/.*)?$", r"\1", r["url"]),
                             "lat"     : lat,
@@ -356,7 +391,7 @@ class Markers(object):
                     lat = entry["lat"]
                     lon = entry["lon"]
                     rl  = MarkerLocation({
-                        "type"    : "feature",
+                        "type"    : "latlon",
                         "mode"    : "WebSDR",
                         "id"      : re.sub(r"^.*://(.*?)(/.*)?$", r"\1", entry["url"]),
                         "lat"     : lat,
@@ -398,7 +433,7 @@ class Markers(object):
                             lat = float(m.group(1))
                             lon = float(m.group(2))
                             rl = MarkerLocation({
-                                "type"    : "feature",
+                                "type"    : "latlon",
                                 "mode"    : "KiwiSDR",
                                 "id"      : re.sub(r"^.*://(.*?)(/.*)?$", r"\1", entry["url"]),
                                 "lat"     : lat,
@@ -427,3 +462,4 @@ class Markers(object):
 
         # Done
         return result
+

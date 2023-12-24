@@ -31,8 +31,16 @@ while(<STDIN>)
 
       if($First) { $First=0; } else { printf(",\n"); }
 
-      # Set FAX frequencies 1.5kHz lower than the carrier
-      if(lc($Mod) eq "fax") { $Freq -= 1.5; }
+      # Set FAX frequencies 1.9kHz lower than the carrier
+      if(lc($Mod) eq "fax")     { $Freq -= 1.9; }
+      # Set RTTY frequencies 1kHz lower than the left carrier
+      if(lc($Mod) eq "rtty450") { $Freq -= 1.0; }
+      if(lc($Mod) eq "rtty170") { $Freq -= 1.0; }
+      if(lc($Mod) eq "rtty85")  { $Freq -= 1.0; }
+      # Set NAVTEX/SITOR-B frequencies 1kHz lower than the left carrier
+      if(lc($Mod) eq "sitorb")  { $Freq -= 1.0; }
+      # Set CW frequencies 800Hz lower than the carrier
+      if(lc($Mod) eq "cw")  { $Freq -= 0.8; }
 
       printf("    {\n");
       printf("        \"name\" : \"%s\",\n", $Name);

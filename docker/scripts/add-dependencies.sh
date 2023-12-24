@@ -20,12 +20,13 @@ function cmakebuild() {
 
 cd /tmp
 
-STATIC_PACKAGES="libfftw3-bin python3 python3-setuptools netcat-openbsd libsndfile1 liblapack3 libusb-1.0-0 libqt5core5a libreadline8 libgfortran5 libgomp1 libasound2 libudev1 ca-certificates libpulse0 libfaad2 libopus0 libboost-program-options1.74.0 libboost-log1.74.0 libcurl4 alsa-utils libpopt0 libliquid2d libconfig9 libconfig++9v5 imagemagick"
-BUILD_PACKAGES="wget git libsndfile1-dev libfftw3-dev cmake make gcc g++ liblapack-dev texinfo gfortran libusb-1.0-0-dev qtbase5-dev qtmultimedia5-dev qttools5-dev libqt5serialport5-dev qttools5-dev-tools asciidoctor asciidoc libasound2-dev libudev-dev libhamlib-dev patch xsltproc qt5-qmake libfaad-dev libopus-dev libboost-dev libboost-program-options-dev libboost-log-dev libboost-regex-dev libpulse-dev libcurl4-openssl-dev libpopt-dev libliquid-dev libconfig++-dev"
+STATIC_PACKAGES="libfftw3-bin python3 python3-setuptools netcat-openbsd libsndfile1 liblapack3 libusb-1.0-0 libqt5core5a libreadline8 libgfortran5 libgomp1 libasound2 libudev1 ca-certificates libpulse0 libfaad2 libopus0 libboost-program-options1.74.0 libboost-log1.74.0 libcurl4 alsa-utils libpopt0 libliquid2d libconfig9 libconfig++9v5 imagemagick libncurses6 libliquid2d"
+BUILD_PACKAGES="wget git libsndfile1-dev libfftw3-dev cmake make gcc g++ liblapack-dev texinfo gfortran libusb-1.0-0-dev qtbase5-dev qtmultimedia5-dev qttools5-dev libqt5serialport5-dev qttools5-dev-tools asciidoctor asciidoc libasound2-dev libudev-dev libhamlib-dev patch xsltproc qt5-qmake libfaad-dev libopus-dev libboost-dev libboost-program-options-dev libboost-log-dev libboost-regex-dev libpulse-dev libcurl4-openssl-dev libpopt-dev libliquid-dev libconfig++-dev libncurses-dev libliquid-dev autoconf build-essential automake"
 apt-get update
 apt-get -y install auto-apt-proxy
 apt-get -y install --no-install-recommends $STATIC_PACKAGES $BUILD_PACKAGES
 
+export MARCH=native
 case `uname -m` in
     arm*)
         PLATFORM=armhf
@@ -35,12 +36,21 @@ case `uname -m` in
         ;;
     x86_64*)
         PLATFORM=amd64
+        export MARCH=x86-64
         ;;
 esac
 
 wget https://github.com/just-containers/s6-overlay/releases/download/v1.21.8.0/s6-overlay-${PLATFORM}.tar.gz
 tar xzf s6-overlay-${PLATFORM}.tar.gz -C /
 rm s6-overlay-${PLATFORM}.tar.gz
+
+git clone https://github.com/windytan/redsea.git
+pushd redsea
+./autogen.sh
+./configure
+make
+make install
+popd
 
 JS8CALL_VERSION=2.2.0
 JS8CALL_DIR=js8call
@@ -61,6 +71,13 @@ patch -Np0 -d ${WSJT_DIR} < /wsjtx-hamlib.patch
 cp /wsjtx.patch ${WSJT_DIR}
 cmakebuild ${WSJT_DIR}
 rm ${WSJT_TGZ}
+
+git clone https://github.com/flightaware/dump1090.git
+pushd dump1090
+make dump1090
+cp dump1090 /usr/local/bin/
+popd
+rm -rf dump1090
 
 git clone https://github.com/alexander-sholohov/msk144decoder.git
 # latest from main as of 2023-02-21
@@ -86,7 +103,7 @@ rm -rf /usr/local/share/doc/direwolf/examples/
 git clone https://github.com/drowe67/codec2.git
 cd codec2
 # latest commit from master as of 2020-10-04
-git checkout 55d7bb8d1bddf881bdbfcb971a718b83e6344598
+#git checkout 55d7bb8d1bddf881bdbfcb971a718b83e6344598
 mkdir build
 cd build
 cmake ..
@@ -113,8 +130,15 @@ cmakebuild m17-cxx-demod v2.3
 git clone https://github.com/szpajder/libacars.git
 cmakebuild libacars v2.1.4
 
+git clone https://github.com/TLeconte/acarsdec.git
+sed -i 's/-march=native/-march='${MARCH}'/g' acarsdec/CMakeLists.txt
+cmakebuild acarsdec
+
 git clone https://github.com/szpajder/dumphfdl.git
 cmakebuild dumphfdl v1.4.1
+
+git clone https://github.com/szpajder/dumpvdl2.git
+cmakebuild dumpvdl2
 
 git clone https://github.com/EliasOenal/multimon-ng.git
 cmakebuild multimon-ng 1.2.0

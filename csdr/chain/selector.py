@@ -1,13 +1,20 @@
 from csdr.chain import Chain
 from pycsdr.modules import Shift, FirDecimate, Bandpass, Squelch, FractionalDecimator, Writer
 from pycsdr.types import Format
+from typing import Union
 import math
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Decimator(Chain):
     def __init__(self, inputRate: int, outputRate: int):
         if outputRate > inputRate:
-            raise ValueError("impossible decimation: cannot upsample {} to {}".format(inputRate, outputRate))
+            logger.error("impossible decimation: cannot upsample {} to {}".format(inputRate, outputRate))
+            outputRate = inputRate
+# @@@ Avoid exceptions, since later GC may crash Python!
+#            raise ValueError("impossible decimation: cannot upsample {} to {}".format(inputRate, outputRate))
         self.inputRate = inputRate
         self.outputRate = outputRate
 
@@ -28,6 +35,16 @@ class Decimator(Chain):
         super().__init__(workers)
 
     def _getDecimation(self, outputRate: int) -> (int, float):
+        if outputRate > self.inputRate:
+            logger.error("cannot provide selected output rate {} since it is bigger than input rate {}".format(outputRate, self.inputRate))
+            outputRate = self.inputRate
+# @@@ Avoid exceptions, since later GC may crash Python!
+#            raise SelectorError(
+#                "cannot provide selected output rate {} since it is bigger than input rate {}".format(
+#                    outputRate,
+#                    self.inputRate
+#                )
+#            )
         d = self.inputRate / outputRate
         dInt = int(d)
         dFloat = float(self.inputRate / dInt) / outputRate
@@ -72,10 +89,9 @@ class Selector(Chain):
         self.decimation = Decimator(inputRate, outputRate)
 
         self.bandpass = self._buildBandpass()
-        self.bandpassCutoffs = None
-        self.setBandpass(-4000, 4000)
+        self.bandpassCutoffs = [None, None]
 
-        workers = [self.shift, self.decimation, self.bandpass]
+        workers = [self.shift, self.decimation]
 
         if withSquelch:
             self.readings_per_second = 4
@@ -106,16 +122,30 @@ class Selector(Chain):
     def setSquelchLevel(self, level: float) -> None:
         self.squelch.setSquelchLevel(self._convertToLinear(level))
 
+    def _enableBandpass(self):
+        index = self.indexOf(lambda x: isinstance(x, Bandpass))
+        if index < 0:
+            self.insert(2, self.bandpass)
+
+    def _disableBandpass(self):
+        index = self.indexOf(lambda x: isinstance(x, Bandpass))
+        if index >= 0:
+            self.remove(index)
+
     def setBandpass(self, lowCut: float, highCut: float) -> None:
         self.bandpassCutoffs = [lowCut, highCut]
-        scaled = [x / self.outputRate for x in self.bandpassCutoffs]
-        self.bandpass.setBandpass(*scaled)
+        if None in self.bandpassCutoffs:
+            self._disableBandpass()
+        else:
+            self._enableBandpass()
+            scaled = [x / self.outputRate for x in self.bandpassCutoffs]
+            self.bandpass.setBandpass(*scaled)
 
-    def setLowCut(self, lowCut: float) -> None:
+    def setLowCut(self, lowCut: Union[float, None]) -> None:
         self.bandpassCutoffs[0] = lowCut
         self.setBandpass(*self.bandpassCutoffs)
 
-    def setHighCut(self, highCut: float) -> None:
+    def setHighCut(self, highCut: Union[float, None]) -> None:
         self.bandpassCutoffs[1] = highCut
         self.setBandpass(*self.bandpassCutoffs)
 
@@ -129,9 +159,11 @@ class Selector(Chain):
 
         self.decimation.setOutputRate(outputRate)
         self.squelch.setReportInterval(int(outputRate / (self.readings_per_second * 1024)))
+        index = self.indexOf(lambda x: isinstance(x, Bandpass))
         self.bandpass = self._buildBandpass()
         self.setBandpass(*self.bandpassCutoffs)
-        self.replace(2, self.bandpass)
+        if index >= 0:
+            self.replace(index, self.bandpass)
 
     def setInputRate(self, inputRate: int) -> None:
         if inputRate == self.inputRate:
@@ -158,3 +190,7 @@ class SecondarySelector(Chain):
         if self.frequencyOffset is None:
             return
         self.shift.setRate(-offset / self.sampleRate)
+
+
+class SelectorError(Exception):
+    pass

@@ -74,3 +74,24 @@ ul {
     border-color: #DDD;
     padding: 5px;
 }
+
+.openwebrx-map-console {
+    overflow: auto;
+    margin: 5px auto;
+    padding: 6px;
+    border-radius: 8px;
+    background-color: #000040;
+    color: #80FF20;
+    width: 92%;
+}
+
+.openwebrx-map-console hr {
+    border: 1px dashed #80FF20;
+}
+
+.openwebrx-map-info td {
+    padding-left: 5px;
+    padding-right: 5px;
+    text-align: center;
+    white-space: nowrap;
+}

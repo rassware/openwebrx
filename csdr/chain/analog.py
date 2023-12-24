@@ -76,6 +76,17 @@ class Ssb(BaseDemodulatorChain):
         super().__init__(workers)
 
 
+class Empty(BaseDemodulatorChain):
+    def __init__(self):
+        super().__init__([])
+
+    def getOutputFormat(self) -> Format:
+        return Format.FLOAT
+
+    def setWriter(self, writer):
+        pass
+
+
 class SAm(BaseDemodulatorChain):
     def __init__(self):
         self.updatePeriod = 10

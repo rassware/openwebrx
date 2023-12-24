@@ -13,6 +13,7 @@ class SdrplaySource(SoapyConnectorSource):
                 "bias_tee": "biasT_ctrl",
                 "rf_notch": "rfnotch_ctrl",
                 "dab_notch": "dabnotch_ctrl",
+                "hdr_mode": "hdr_ctrl",
                 "if_mode": "if_mode",
                 "external_reference": "extref_ctrl",
                 "rfgain_sel": "rfgain_sel",
@@ -50,6 +51,15 @@ class SdrplayDeviceDescription(SoapyConnectorDeviceDescription):
                 "dab_notch",
                 "Enable DAB notch filter",
             ),
+            CheckboxInput(
+                "hdr_mode",
+                "Enable HDR mode (RSPdx only)",
+                infotext = "The high dynamic resolution (HDR) mode will "
+                + "only work when the center frequency is set to 135kHz, "
+                + "175kHz, 220kHz, 250kHz, 340kHz, 475kHz, 516kHz, 875kHz, "
+                + "1.125MHz, or 1.9MHz. It will not work on devices other "
+                + "than RSPdx or at other center frequencies."
+            ),
             DropdownInput(
                 "if_mode",
                 "IF Mode",
@@ -74,7 +84,7 @@ class SdrplayDeviceDescription(SoapyConnectorDeviceDescription):
         ]
 
     def getDeviceOptionalKeys(self):
-        return super().getDeviceOptionalKeys() + ["bias_tee", "rf_notch", "dab_notch", "if_mode", "rfgain_sel", "agc_setpoint"]
+        return super().getDeviceOptionalKeys() + ["bias_tee", "rf_notch", "dab_notch", "hdr_mode", "if_mode", "rfgain_sel", "agc_setpoint"]
 
     def getProfileOptionalKeys(self):
-        return super().getProfileOptionalKeys() + ["bias_tee", "rf_notch", "dab_notch", "if_mode", "rfgain_sel", "agc_setpoint"]
+        return super().getProfileOptionalKeys() + ["bias_tee", "rf_notch", "dab_notch", "hdr_mode", "if_mode", "rfgain_sel", "agc_setpoint"]

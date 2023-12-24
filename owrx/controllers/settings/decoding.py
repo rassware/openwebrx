@@ -4,6 +4,7 @@ from owrx.form.input import CheckboxInput, NumberInput, DropdownInput, Js8Profil
 from owrx.form.input.wfm import WfmTauValues
 from owrx.form.input.wsjt import Q65ModeMatrix, WsjtDecodingDepthsInput
 from owrx.form.input.converter import OptionalConverter
+from owrx.form.input.validator import RangeValidator
 from owrx.wsjt import Fst4Profile, Fst4wProfile
 from owrx.breadcrumb import Breadcrumb, BreadcrumbItem
 
@@ -18,12 +19,18 @@ class DecodingSettingsController(SettingsFormController):
     def getSections(self):
         return [
             Section(
-                "Demodulator settings",
+                "Miscellaneous",
                 NumberInput(
                     "squelch_auto_margin",
                     "Auto-Squelch threshold",
                     infotext="Offset to be added to the current signal level when using the auto-squelch",
                     append="dB",
+                ),
+                NumberInput(
+                    "digimodes_fft_size",
+                    "Secondary FFT size",
+                    infotext="Secondary waterfall resolution in digital modes",
+                    append="bins"
                 ),
                 DropdownInput(
                     "wfm_deemphasis_tau",
@@ -31,6 +38,18 @@ class DecodingSettingsController(SettingsFormController):
                     WfmTauValues,
                     infotext='See <a href="https://en.wikipedia.org/wiki/FM_broadcasting#Pre-emphasis_and_de-emphasis"'
                     + ' target="_blank">this Wikipedia article</a> for more information',
+                ),
+                CheckboxInput(
+                    "rds_usa",
+                    "Decode USA-specific RDS information from WFM broadcasts",
+                ),
+                CheckboxInput(
+                    "paging_filter",
+                    "Filter out empty, numeric, or unreadable pager messages",
+                ),
+                CheckboxInput(
+                    "cw_showcw",
+                    "Show CW codes (dits / dahs) when decoding CW",
                 ),
             ),
             Section(
@@ -54,18 +73,40 @@ class DecodingSettingsController(SettingsFormController):
                 ),
             ),
             Section(
-                "Digimodes",
-                NumberInput("digimodes_fft_size", "Digimodes FFT size", append="bins"),
-            ),
-            Section(
-                "Pager traffic",
-                CheckboxInput(
-                    "paging_filter",
-                    "Filter out empty, numeric, or unreadable pager messages",
+                "Aircraft messages",
+                NumberInput(
+                    "adsb_ttl",
+                    "ADSB reports expiration time",
+                    validator=RangeValidator(30, 3600),
+                    append="s",
+                ),
+                NumberInput(
+                    "vdl2_ttl",
+                    "VDL2 reports expiration time",
+                    validator=RangeValidator(30, 3600),
+                    append="s",
+                ),
+                NumberInput(
+                    "hfdl_ttl",
+                    "HFDL reports expiration time",
+                    validator=RangeValidator(30, 3600),
+                    append="s",
+                ),
+                NumberInput(
+                    "acars_ttl",
+                    "ACARS reports expiration time",
+                    validator=RangeValidator(30, 3600),
+                    append="s",
                 ),
             ),
             Section(
-                "Decoding settings",
+                "Fax transmissions",
+                CheckboxInput("fax_postprocess", "Post-process received images to reduce noise"),
+                CheckboxInput("fax_color", "Receive color images"),
+                CheckboxInput("fax_am", "Use amplitude modulation"),
+            ),
+            Section(
+                "WSJT decoders",
                 NumberInput("decoding_queue_workers", "Number of decoding workers"),
                 NumberInput("decoding_queue_length", "Maximum length of decoding job queue"),
                 NumberInput(
@@ -94,6 +135,5 @@ class DecodingSettingsController(SettingsFormController):
                     [Option(v, "{}s".format(v)) for v in Fst4wProfile.availableIntervals],
                 ),
                 Q65ModeMatrix("q65_enabled_combinations", "Enabled Q65 Mode combinations"),
-
             ),
         ]

@@ -2,17 +2,17 @@ from owrx.controllers.settings import SettingsFormController
 from owrx.form.section import Section
 from owrx.config.core import CoreConfig
 from owrx.form.input import (
+    CheckboxInput,
     TextInput,
     NumberInput,
     FloatInput,
     TextAreaInput,
     DropdownInput,
-    CheckboxInput,
     Option,
 )
 from owrx.form.input.validator import RangeValidator
 from owrx.form.input.converter import WaterfallColorsConverter, IntConverter
-from owrx.form.input.receiverid import ReceiverKeysConverter
+from owrx.form.input.receiverid import ReceiverKeysInput
 from owrx.form.input.gfx import AvatarInput, TopPhotoInput
 from owrx.form.input.device import WaterfallLevelsInput, WaterfallAutoLevelsInput
 from owrx.form.input.location import LocationInput
@@ -83,13 +83,17 @@ class GeneralSettingsController(SettingsFormController):
                     "session_timeout",
                     "Session timeout",
                     infotext="Client session timeout in seconds (0 to disable timeout).",
-                    append="secs",
+                    append="s",
                 ),
                 TextInput(
                     "usage_policy_url",
                     "Usage policy URL",
                     infotext="Specifies web page describing receiver usage policy "
                     + "and shown when a client session times out.",
+                ),
+                CheckboxInput(
+                    "allow_chat",
+                    "Allow users to chat with each other",
                 ),
                 CheckboxInput(
                     "allow_audio_recording",
@@ -110,12 +114,9 @@ class GeneralSettingsController(SettingsFormController):
             ),
             Section(
                 "Receiver listings",
-                TextAreaInput(
+                ReceiverKeysInput(
                     "receiver_keys",
                     "Receiver keys",
-                    converter=ReceiverKeysConverter(),
-                    infotext="Put the keys you receive on listing sites (e.g. "
-                    + '<a href="https://www.receiverbook.de" target="_blank">Receiverbook</a>) here, one per line',
                 ),
             ),
             Section(
@@ -153,6 +154,11 @@ class GeneralSettingsController(SettingsFormController):
                     infotext="Specifies the upper and lower dynamic headroom that should be added when automatically "
                     + "adjusting waterfall colors",
                 ),
+                CheckboxInput(
+                    "waterfall_auto_level_default_mode",
+                    "Automatically adjust waterfall level by default",
+                    infotext="Enable this to automatically enable auto adjusting waterfall levels on page load.",
+                ),
                 NumberInput(
                     "waterfall_auto_min_range",
                     "Automatic adjustment minimum range",
@@ -182,31 +188,41 @@ class GeneralSettingsController(SettingsFormController):
             ),
             Section(
                 "Display settings",
-                NumberInput(
-                    "ui_opacity",
-                    "User interface opacity",
-                    infotext="Specifies how opaque user interface is, "
-                    + "10% for near invisible, 100% for totally solid.",
-                    validator=RangeValidator(10, 100),
-                    append="%",
-                ),
-                CheckboxInput(
-                    "ui_frame",
-                    "Show frame around receiver panel",
-                ),
-                CheckboxInput(
-                    "ui_swap_wheel",
-                    "Make mouse wheel control zoom, tune by holding wheel down",
-                ),
                 DropdownInput(
                     "tuning_precision",
                     "Tuning precision",
                     options=[Option(str(i), "{} Hz".format(10 ** i)) for i in range(0, 6)],
                     converter=IntConverter(),
                 ),
+                NumberInput(
+                    "eibi_bookmarks_range",
+                    "Shortwave bookmarks range",
+                    infotext="Specifies the distance from the receiver location to "
+                    + "search EIBI schedules for stations when creating automatic "
+                    + "bookmarks. Set to 0 to disable automatic EIBI bookmarks.",
+                    validator=RangeValidator(0, 25000),
+                    append="km",
+                ),
+                NumberInput(
+                    "repeater_range",
+                    "Repeater bookmarks range",
+                    infotext="Specifies the distance from the receiver location to "
+                    + "search RepeaterBook.com for repeaters when creating automatic "
+                    + "bookmarks. Set to 0 to disable automatic repeater bookmarks.",
+                    validator=RangeValidator(0, 200),
+                    append="km",
+                ),
             ),
             Section(
                 "Map settings",
+                DropdownInput(
+                    "map_type",
+                    "Map type",
+                    options=[
+                        Option("google", "Google Maps"),
+                        Option("leaflet", "OpenStreetMap, etc."),
+                    ],
+                ),
                 TextInput(
                     "google_maps_api_key",
                     "Google Maps API key",
@@ -214,10 +230,17 @@ class GeneralSettingsController(SettingsFormController):
                     + '<a href="https://developers.google.com/maps/documentation/embed/get-api-key" target="_blank">'
                     + "their documentation</a> on how to obtain one.",
                 ),
+                TextInput(
+                    "openweathermap_api_key",
+                    "OpenWeatherMap API key",
+                    infotext="OpenWeatherMap requires an API key, check out "
+                    + '<a href="https://openweathermap.org/appid" target="_blank">'
+                    + "their documentation</a> on how to obtain one.",
+                ),
                 NumberInput(
                     "map_position_retention_time",
                     "Map retention time",
-                    infotext="Specifies how log markers / grids will remain visible on the map",
+                    infotext="Specifies how long markers / grids will remain visible on the map",
                     append="s",
                 ),
                 CheckboxInput(
@@ -232,7 +255,7 @@ class GeneralSettingsController(SettingsFormController):
                     "callsign_url",
                     "Callsign database URL",
                     infotext="Specifies callsign lookup URL, such as QRZ.COM "
-                    + "or QRZCQ.COM. Place curly brackers ({}) where callsign "
+                    + "or QRZCQ.COM. Place curly brackets ({}) where callsign "
                     + "is supposed to be.",
                 ),
                 TextInput(
@@ -240,14 +263,21 @@ class GeneralSettingsController(SettingsFormController):
                     "Vessel database URL",
                     infotext="Specifies vessel lookup URL, such as VESSELFINDER.COM, "
                     + "allowing to look up vessel information by its AIS MMSI number. "
-                    + "Place curly brackers ({}) where MMSI is supposed to be.",
+                    + "Place curly brackets ({}) where MMSI is supposed to be.",
                 ),
                 TextInput(
                     "flight_url",
                     "Flight database URL",
                     infotext="Specifies flight lookup URL, such as FLIGHTAWARE.COM, "
-                    + "allowing to look up flights and aircraft. Place curly brackers ({}) "
-                    + "where flight or aircraft identifier is supposed to be.",
+                    + "allowing to look up flights and aircraft. Place curly brackets "
+                    + "({}) where flight or aircraft identifier is supposed to be.",
+                ),
+                TextInput(
+                    "modes_url",
+                    "Aircraft database URL",
+                    infotext="Specifies aircraft lookup URL, such as PLANESPOTTERS.NET, "
+                    + "allowing to look up aircraft by their Mode-S codes. Place curly "
+                    + "brackets ({}) where aircraft Mode-S code is supposed to be.",
                 ),
             ),
         ]

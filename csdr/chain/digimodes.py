@@ -3,11 +3,12 @@ from csdr.module.msk144 import Msk144Module, ParserAdapter
 from owrx.audio.chopper import AudioChopper, AudioChopperParser
 from owrx.aprs.kiss import KissDeframer
 from owrx.aprs import Ax25Parser, AprsParser
-from pycsdr.modules import Convert, FmDemod, Agc, TimingRecovery, DBPskDecoder, VaricodeDecoder, CwDecoder, RttyDecoder, SstvDecoder, FaxDecoder, Shift
+from pycsdr.modules import Convert, FmDemod, Agc, TimingRecovery, DBPskDecoder, VaricodeDecoder, RttyDecoder, BaudotDecoder, Lowpass, MFRttyDecoder, CwDecoder, SstvDecoder, FaxDecoder, SitorBDecoder, Ccir476Decoder, DscDecoder, Ccir493Decoder, Shift
 from pycsdr.types import Format
-from owrx.aprs.module import DirewolfModule
+from owrx.aprs.direwolf import DirewolfModule
 from owrx.sstv import SstvParser
 from owrx.fax import FaxParser
+from owrx.config import Config
 
 class AudioChopperDemodulator(ServiceDemodulator, DialFrequencyReceiver):
     def __init__(self, mode: str, parser: AudioChopperParser):
@@ -70,7 +71,7 @@ class PskDemodulator(SecondaryDemodulator, SecondarySelectorChain):
         secondary_samples_per_bits = int(round(self.sampleRate / self.baudRate)) & ~3
         workers = [
             Agc(Format.COMPLEX_FLOAT),
-            TimingRecovery(secondary_samples_per_bits, 0.5, 2, useQ=True),
+            TimingRecovery(Format.COMPLEX_FLOAT, secondary_samples_per_bits, 0.5, 2),
             DBPskDecoder(),
             VaricodeDecoder(),
         ]
@@ -84,33 +85,66 @@ class PskDemodulator(SecondaryDemodulator, SecondarySelectorChain):
             return
         self.sampleRate = sampleRate
         secondary_samples_per_bits = int(round(self.sampleRate / self.baudRate)) & ~3
-        self.replace(1, TimingRecovery(secondary_samples_per_bits, 0.5, 2, useQ=True))
+        self.replace(1, TimingRecovery(Format.COMPLEX_FLOAT, secondary_samples_per_bits, 0.5, 2))
 
 
-class CwDemodulator(SecondaryDemodulator, SecondarySelectorChain):
-    def __init__(self, baudRate: float):
-        self.sampleRate = 12000
-        self.offset = 800
+class RttyDemodulator(SecondaryDemodulator, SecondarySelectorChain):
+    def __init__(self, baudRate, bandWidth, invert=False):
         self.baudRate = baudRate
+        self.bandWidth = bandWidth
+        self.invert = invert
+        # this is an assumption, we will adjust in setSampleRate
+        self.sampleRate = 12000
+        secondary_samples_per_bit = int(round(self.sampleRate / self.baudRate))
+        cutoff = self.baudRate / self.sampleRate
+        loop_gain = self.sampleRate / self.getBandwidth() / 5
         workers = [
-            Shift(float(self.offset) / self.sampleRate),
             Agc(Format.COMPLEX_FLOAT),
-            CwDecoder(self.sampleRate, self.offset, int(self.baudRate)),
+            FmDemod(),
+            Lowpass(Format.FLOAT, cutoff),
+            TimingRecovery(Format.FLOAT, secondary_samples_per_bit, loop_gain, 10),
+            RttyDecoder(invert),
+            BaudotDecoder(),
         ]
         super().__init__(workers)
 
-    def getBandwidth(self):
-        return self.baudRate
+    def getBandwidth(self) -> float:
+        return self.bandWidth
 
     def setSampleRate(self, sampleRate: int) -> None:
         if sampleRate == self.sampleRate:
             return
         self.sampleRate = sampleRate
-        self.replace(0, Shift(float(self.offset) / sampleRate))
-        self.replace(2, CwDecoder(sampleRate, self.offset, int(self.baudRate)))
+        secondary_samples_per_bit = int(round(self.sampleRate / self.baudRate))
+        cutoff = self.baudRate / self.sampleRate
+        loop_gain = self.sampleRate / self.getBandwidth() / 5
+        self.replace(2, Lowpass(Format.FLOAT, cutoff))
+        self.replace(3, TimingRecovery(Format.FLOAT, secondary_samples_per_bit, loop_gain, 10))
 
 
-class RttyDemodulator(SecondaryDemodulator, SecondarySelectorChain):
+class CwDemodulator(SecondaryDemodulator, SecondarySelectorChain):
+    def __init__(self, bandWidth: float = 100):
+        pm = Config.get()
+        self.sampleRate = 12000
+        self.bandWidth = bandWidth
+        self.showCw = pm["cw_showcw"]
+        workers = [
+            Agc(Format.COMPLEX_FLOAT),
+            CwDecoder(self.sampleRate, self.showCw),
+        ]
+        super().__init__(workers)
+
+    def getBandwidth(self):
+        return self.bandWidth
+
+    def setSampleRate(self, sampleRate: int) -> None:
+        if sampleRate == self.sampleRate:
+            return
+        self.sampleRate = sampleRate
+        self.replace(1, CwDecoder(sampleRate, self.showCw))
+
+
+class MFRttyDemodulator(SecondaryDemodulator, SecondarySelectorChain):
     def __init__(self, targetWidth: float, baudRate: float, reverse: bool):
         self.sampleRate = 12000
         self.offset = 550
@@ -120,7 +154,7 @@ class RttyDemodulator(SecondaryDemodulator, SecondarySelectorChain):
         workers = [
             Shift((self.targetWidth/2 + self.offset) / self.sampleRate),
             Agc(Format.COMPLEX_FLOAT),
-            RttyDecoder(self.sampleRate, self.offset, int(self.targetWidth), self.baudRate, self.reverse),
+            MFRttyDecoder(self.sampleRate, self.offset, int(self.targetWidth), self.baudRate, self.reverse),
         ]
         super().__init__(workers)
 
@@ -132,7 +166,7 @@ class RttyDemodulator(SecondaryDemodulator, SecondarySelectorChain):
             return
         self.sampleRate = sampleRate
         self.replace(0, Shift((self.targetWidth/2 + self.offset) / sampleRate))
-        self.replace(2, RttyDecoder(sampleRate, self.offset, int(self.targetWidth), self.baudRate, self.reverse))
+        self.replace(2, MFRttyDecoder(sampleRate, self.offset, int(self.targetWidth), self.baudRate, self.reverse))
 
 
 class SstvDemodulator(ServiceDemodulator, DialFrequencyReceiver):
@@ -141,7 +175,6 @@ class SstvDemodulator(ServiceDemodulator, DialFrequencyReceiver):
         self.sampleRate = 24000
         self.dbgTime = 300000
         workers = [
-            Agc(Format.COMPLEX_FLOAT),
             SstvDecoder(self.sampleRate, self.dbgTime),
             self.parser
         ]
@@ -156,13 +189,23 @@ class SstvDemodulator(ServiceDemodulator, DialFrequencyReceiver):
 
 class FaxDemodulator(ServiceDemodulator, DialFrequencyReceiver):
     def __init__(self, service: bool = False):
-        self.parser = FaxParser(service=service)
-        self.sampleRate = 24000
-        self.lpm = 120
-        self.dbgTime = 300000
+        pm = Config.get()
+        self.parser      = FaxParser(service=service)
+        self.sampleRate  = 12000
+        self.lpm         = 120
+        self.dbgTime     = 300000
+        self.postProcess = pm["fax_postprocess"]
+        self.color       = pm["fax_color"]
+        self.am          = pm["fax_am"]
         workers = [
-            Agc(Format.COMPLEX_FLOAT),
-            FaxDecoder(self.sampleRate, self.lpm, self.dbgTime),
+            FaxDecoder(
+                self.sampleRate,
+                self.lpm,
+                self.dbgTime,
+                postProcess = self.postProcess,
+                color = self.color,
+                am = self.am
+            ),
             self.parser
         ]
         super().__init__(workers)
@@ -173,3 +216,70 @@ class FaxDemodulator(ServiceDemodulator, DialFrequencyReceiver):
     def setDialFrequency(self, frequency: int) -> None:
         self.parser.setDialFrequency(frequency)
 
+
+class SitorBDemodulator(SecondaryDemodulator, SecondarySelectorChain):
+    def __init__(self, baudRate=100, bandWidth=170, invert=False):
+        self.baudRate = baudRate
+        self.bandWidth = bandWidth
+        self.invert = invert
+        # this is an assumption, we will adjust in setSampleRate
+        self.sampleRate = 12000
+        secondary_samples_per_bit = int(round(self.sampleRate / self.baudRate))
+        cutoff = self.baudRate / self.sampleRate
+        loop_gain = self.sampleRate / self.getBandwidth() / 5
+        workers = [
+            Agc(Format.COMPLEX_FLOAT),
+            FmDemod(),
+            Lowpass(Format.FLOAT, cutoff),
+            TimingRecovery(Format.FLOAT, secondary_samples_per_bit, loop_gain, 10),
+            SitorBDecoder(jitter=1, allowErrors=16, invert=invert),
+            Ccir476Decoder(),
+        ]
+        super().__init__(workers)
+
+    def getBandwidth(self) -> float:
+        return self.bandWidth
+
+    def setSampleRate(self, sampleRate: int) -> None:
+        if sampleRate == self.sampleRate:
+            return
+        self.sampleRate = sampleRate
+        secondary_samples_per_bit = int(round(self.sampleRate / self.baudRate))
+        cutoff = self.baudRate / self.sampleRate
+        loop_gain = self.sampleRate / self.getBandwidth() / 5
+        self.replace(2, Lowpass(Format.FLOAT, cutoff))
+        self.replace(3, TimingRecovery(Format.FLOAT, secondary_samples_per_bit, loop_gain, 10))
+
+
+class DscDemodulator(SecondaryDemodulator, SecondarySelectorChain):
+    def __init__(self, baudRate=100, bandWidth=170, invert=False):
+        self.baudRate = baudRate
+        self.bandWidth = bandWidth
+        self.invert = invert
+        # this is an assumption, we will adjust in setSampleRate
+        self.sampleRate = 12000
+        secondary_samples_per_bit = int(round(self.sampleRate / self.baudRate))
+        cutoff = self.baudRate / self.sampleRate
+        loop_gain = self.sampleRate / self.getBandwidth() / 5
+        workers = [
+            Agc(Format.COMPLEX_FLOAT),
+            FmDemod(),
+            Lowpass(Format.FLOAT, cutoff),
+            TimingRecovery(Format.FLOAT, secondary_samples_per_bit, loop_gain, 10),
+            Ccir493Decoder(invert=invert),
+            DscDecoder(),
+        ]
+        super().__init__(workers)
+
+    def getBandwidth(self) -> float:
+        return self.bandWidth
+
+    def setSampleRate(self, sampleRate: int) -> None:
+        if sampleRate == self.sampleRate:
+            return
+        self.sampleRate = sampleRate
+        secondary_samples_per_bit = int(round(self.sampleRate / self.baudRate))
+        cutoff = self.baudRate / self.sampleRate
+        loop_gain = self.sampleRate / self.getBandwidth() / 5
+        self.replace(2, Lowpass(Format.FLOAT, cutoff))
+        self.replace(3, TimingRecovery(Format.FLOAT, secondary_samples_per_bit, loop_gain, 10))

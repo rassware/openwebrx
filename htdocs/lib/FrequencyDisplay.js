@@ -122,7 +122,9 @@ TuneableFrequencyDisplay.prototype.setupEvents = function() {
     });
     $inputs.on('blur', function(e){
         if (!me.input.is(':visible')) return;
-        if ($inputs.toArray().indexOf(e.relatedTarget) >= 0) return;
+        if ($inputs.toArray().indexOf(e.relatedTarget) >= 0) {
+            return;
+        }
         submit();
     });
     me.input.on('keydown', function(e){

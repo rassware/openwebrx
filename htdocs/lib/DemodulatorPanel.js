@@ -91,7 +91,7 @@ DemodulatorPanel.prototype.setMode = function(requestedModulation, underlyingMod
         return;
     }
 
-    if (this.mode === mode && (!underlyingModulation || this.underlyingModulation === underlyingModulation)) {
+    if (this.mode === mode && this.underlyingModulation === underlyingModulation) {
         return;
     }
     if (!mode.isAvailable()) {
@@ -101,12 +101,9 @@ DemodulatorPanel.prototype.setMode = function(requestedModulation, underlyingMod
 
     var modulation;
     if (mode.type === 'digimode') {
-        if (underlyingModulation) {
-            modulation = underlyingModulation
-        } else {
-            modulation = mode.underlying[0];
-        }
+        modulation = underlyingModulation = underlyingModulation || mode.underlying[0];
     } else {
+        underlyingModulation = undefined;
         modulation = mode.modulation;
     }
 
@@ -138,8 +135,12 @@ DemodulatorPanel.prototype.setMode = function(requestedModulation, underlyingMod
 
     if (mode.type === 'digimode') {
         this.demodulator.set_secondary_demod(mode.modulation);
-        if (mode.bandpass) {
-            this.demodulator.setBandpass(mode.bandpass);
+        var uMode = Modes.findByModulation(underlyingModulation);
+        var bandpass = mode.bandpass || (uMode && uMode.bandpass);
+        if (bandpass) {
+            this.demodulator.setBandpass(bandpass);
+        } else {
+            this.demodulator.disableBandpass();
         }
     } else {
         this.demodulator.set_secondary_demod(false);
@@ -147,7 +148,7 @@ DemodulatorPanel.prototype.setMode = function(requestedModulation, underlyingMod
 
     this.demodulator.start();
     this.mode = mode;
-    this.underlyingModulation = modulation;
+    this.underlyingModulation = underlyingModulation;
 
     this.updateButtons();
     this.updatePanels();
@@ -161,16 +162,20 @@ DemodulatorPanel.prototype.disableDigiMode = function() {
 DemodulatorPanel.prototype.updatePanels = function() {
     var modulation = this.getDemodulator().get_secondary_demod();
     $('#openwebrx-panel-digimodes').attr('data-mode', modulation);
-    toggle_panel("openwebrx-panel-digimodes", !!modulation);
-    toggle_panel("openwebrx-panel-wsjt-message", ["ft8", "wspr", "jt65", "jt9", "ft4", "fst4", "fst4w", "q65", "msk144"].indexOf(modulation) >= 0);
-    toggle_panel("openwebrx-panel-js8-message", modulation == "js8");
-    toggle_panel("openwebrx-panel-packet-message", ["packet", "ais"].indexOf(modulation) >= 0);
-    toggle_panel("openwebrx-panel-pocsag-message", modulation === "pocsag");
-    toggle_panel("openwebrx-panel-page-message", modulation === "page");
-    toggle_panel("openwebrx-panel-hfdl-message", modulation === "hfdl");
-    toggle_panel("openwebrx-panel-sstv-message", modulation === "sstv");
-    toggle_panel("openwebrx-panel-fax-message", modulation === "fax");
-    toggle_panel("openwebrx-panel-ism-message", modulation === "ism");
+    var mode = Modes.findByModulation(modulation);
+    toggle_panel("openwebrx-panel-digimodes", modulation && (!mode || mode.secondaryFft));
+    // WSJT-X modes share the same panel
+    toggle_panel("openwebrx-panel-wsjt-message", ['ft8', 'wspr', 'jt65', 'jt9', 'ft4', 'fst4', 'fst4w', "q65", "msk144"].indexOf(modulation) >= 0);
+    // Aeronautic modes share the same panel
+    toggle_panel("openwebrx-panel-hfdl-message", ['hfdl', 'vdl2', 'acars'].indexOf(modulation) >= 0);
+    // But ADSB has its own panel
+    toggle_panel("openwebrx-panel-adsb-message", modulation === 'adsb');
+    // Packet modes share the same panel
+    toggle_panel("openwebrx-panel-packet-message", ['packet', 'ais'].indexOf(modulation) >= 0);
+    // these modes come with their own
+    ['js8', 'page', 'pocsag', 'sstv', 'fax', 'ism', 'rds'].forEach(function(m) {
+        toggle_panel('openwebrx-panel-' + m + '-message', modulation === m);
+    });
 
     modulation = this.getDemodulator().get_modulation();
     var showing = 'openwebrx-panel-metadata-' + modulation;
@@ -393,6 +398,6 @@ DemodulatorPanel.prototype.setTuningPrecision = function(precision) {
 $.fn.demodulatorPanel = function(){
     if (!this.data('panel')) {
         this.data('panel', new DemodulatorPanel(this));
-    };
+    }
     return this.data('panel');
 };

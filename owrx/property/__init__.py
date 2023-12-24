@@ -406,7 +406,7 @@ class PropertyCarousel(PropertyDelegator):
             self.switch()
         del self.layers[key]
 
-    def switch(self, key=None, force=False):
+    def switch(self, key=None):
         before = self.pm
         self.subscription.cancel()
         self.pm = self._getDefaultLayer() if key is None else self.layers[key]
@@ -416,6 +416,6 @@ class PropertyCarousel(PropertyDelegator):
             if key not in self:
                 changes[key] = PropertyDeleted
             else:
-                if key not in before or before[key] != self[key] or force:
+                if key not in before or before[key] != self[key]:
                     changes[key] = self[key]
         self._fireCallbacks(changes)
